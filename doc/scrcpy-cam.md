@@ -101,21 +101,35 @@ scrcpy --capture-card --fullscreen             # Full-HD-Bildschirm: Handybild 1
 
 ### Leistung und Bildschirm
 
-CPU-Last von `scrcpy.exe`, gemessen auf einem i7-1365U mit Testgerät B und UGREEN 25772.
-Gemessen wurden jeweils 20 s, in denen die Benachrichtigungsleiste laufend auf- und zuklappte
-(Prozent eines Kerns, alle Threads):
+CPU-Last von `scrcpy.exe` in Prozent eines Kerns, über alle Threads. Gemessen auf einem
+i7-1365U mit Testgerät B und UGREEN 25772, jeweils 20–30 s, ohne Ton (`--no-audio`).
+„Ruhend“ heißt: Handybildschirm unverändert. „Bewegung“ heißt: Die Benachrichtigungsleiste
+klappt laufend auf und zu. Die Werte schwanken um etwa ±1 Prozentpunkt.
 
-| Modus | CPU | Bildrate |
+| Modus | ruhend | Bewegung |
 |---|---|---|
-| `--capture-card` (30 fps, Standard) | ≈ 6 % | 30 fps |
-| `--capture-card --capture-card-fps=60` | ≈ 11 % | 60 fps |
-| normales scrcpy (H.264 vom Handy) | ≈ 7 % | 0–61 fps, nur bei Änderungen |
-| normales scrcpy `--max-fps=30` | ≈ 3 % | 0–32 fps |
+| `--capture-card` (30 fps, Standard) | ≈ 4 % | ≈ 6–8 % |
+| `--capture-card --capture-card-fps=20` | ≈ 2,6 % | – |
+| `--capture-card --capture-card-fps=60` | ≈ 8 % | ≈ 11 % |
+| zum Vergleich: normales scrcpy (H.264 vom Handy) | – | ≈ 7 % |
+| zum Vergleich: normales scrcpy `--max-fps=30` | – | ≈ 3 % |
+| zusätzlich: Ton vom Handy (ohne `--no-audio`) | + ≈ 1–1,5 % | |
 
-Die Karte liefert immer volle Bilder, auch wenn sich nichts ändert. Das normale scrcpy sendet
-nur bei Änderungen, zeigt aber `FLAG_SECURE`-Apps schwarz. Für einen schwächeren PC
-(z. B. i5-7300U, 2 Kerne/4 Threads) ist 30 fps der Standard. Grob gerechnet ist ein Kern
-eines i5-7300U halb so schnell wie hier; dann sind etwa 10–15 % eines Kerns zu erwarten.
+Woher die Last kommt (Messung pro Thread):
+
+- **SDL-Kamera / Media Foundation** (Frames von der Karte abholen): ≈ 3 % bei 30 fps. Das ist die
+  Untergrenze, gemessen auch mit einem minimalen Leser ohne scrcpy. Sie hängt nur von der
+  Bildrate ab. NV12 ist ein natives Format der Karte, Windows rechnet also nicht um.
+- **Unveränderte Frames werden übersprungen:** Bei ruhendem Bild liefert die Karte bitgleiche
+  Frames. Sie werden direkt im Kartenpuffer erkannt (Vergleich mit einer Kopie des letzten
+  Ausschnitts) und weder umgewandelt noch gezeichnet. Hauptthread und Grafiktreiber
+  (zusammen ≈ 3,5 %) fallen dann weg. `--print-fps` zeigt deshalb wie beim normalen scrcpy
+  0 fps, solange sich nichts ändert.
+- **Ton:** Ist der Handyton am PC nicht nötig, spart `--no-audio` noch ≈ 1–1,5 %.
+
+Für einen schwächeren PC (z. B. i5-7300U, 2 Kerne/4 Threads) ist 30 fps der Standard. Grob
+gerechnet ist ein Kern dort halb so schnell wie hier; zu erwarten sind etwa 8 % eines Kerns
+ruhend und 12–16 % bei Bewegung. Reicht das nicht, hilft `--capture-card-fps=20`.
 
 Fenstergröße: Ohne weitere Optionen öffnet sich das Fenster mit einem Kartenpixel pro
 Bildschirmpixel, also hochkant 498×1080 Bildpunkte. Passt das nicht auf den Bildschirm,
@@ -297,8 +311,10 @@ git push --force-with-lease origin main
 2. Pro Frame (`SDL_AcquireCameraFrame`): Ausschnitt bestimmen (siehe unten), Y-Zeilen kopieren,
    UV-Werte aus NV12 in getrennte U/V-Ebenen schreiben → `AVFrame` im Format `YUV420P`.
    Die Puffer kommen aus einem `AVBufferPool` (keine Speicherreservierung pro Frame). Nach
-   einem Frame schläft der Thread ¾ der Frame-Dauer, erst dann wird alle 2 ms nach dem
-   nächsten Frame gefragt (statt durchgehend alle 2 ms).
+   einem Frame schläft der Thread ¾ der Frame-Dauer, erst dann wird alle 4 ms nach dem
+   nächsten Frame gefragt. Ist der Ausschnitt bitgleich mit dem zuletzt gezeigten, wird der
+   Frame verworfen, ohne ihn umzuwandeln oder zu zeichnen (siehe
+   [Leistung](#leistung-und-bildschirm)).
 3. Farbraum: von SDL gemeldet, sonst BT.709 mit begrenztem Bereich (üblich bei HDMI-Capture).
 4. Beim ersten Frame werden die Sinks mit einem leeren `AVCodecContext` (Größe, Pixelformat)
    geöffnet – das öffnet das Fenster. Größenwechsel (Drehung) laufen über

@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/buffer.h>
@@ -42,7 +43,9 @@
     SC_CAPTURE_DISPLAY_CMD "; echo .; sleep 1; done"
 
 #define SC_CAPTURE_RETRY_INTERVAL SC_TICK_FROM_MS(1000)
-#define SC_CAPTURE_POLL_INTERVAL SC_TICK_FROM_MS(2)
+// Polling interval once the next frame is due (SDL has no frame event).
+// At 30 fps (33 ms per frame), 4 ms adds at most ~2 ms of latency on average.
+#define SC_CAPTURE_POLL_INTERVAL SC_TICK_FROM_MS(4)
 #define SC_CAPTURE_STALL_TIMEOUT SC_TICK_FROM_MS(3000)
 #define SC_CAPTURE_PERMISSION_TIMEOUT SC_TICK_FROM_MS(10000)
 
@@ -451,16 +454,17 @@ sc_capture_frame_get_buffer(struct sc_capture_pool *p, AVFrame *frame,
     return true;
 }
 
-// Copy the crop area of a NV12/NV21/IYUV/YV12 surface into frame (YUV420P)
+static inline bool
+sc_capture_is_semi_planar(SDL_PixelFormat fmt) {
+    return fmt == SDL_PIXELFORMAT_NV12 || fmt == SDL_PIXELFORMAT_NV21;
+}
+
+// Check that the surface can be converted
 static bool
-sc_capture_convert(struct sc_capture *capture, struct sc_capture_pool *pool,
-                   SDL_Surface *surface, SDL_Colorspace colorspace,
-                   AVFrame *frame) {
+sc_capture_check_surface(SDL_Surface *surface) {
     SDL_PixelFormat fmt = surface->format;
-    bool semi_planar = fmt == SDL_PIXELFORMAT_NV12
-                    || fmt == SDL_PIXELFORMAT_NV21;
     bool planar = fmt == SDL_PIXELFORMAT_IYUV || fmt == SDL_PIXELFORMAT_YV12;
-    if (!semi_planar && !planar) {
+    if (!sc_capture_is_semi_planar(fmt) && !planar) {
         static bool logged = false;
         if (!logged) {
             LOGE("Capture card: unsupported frame format %s",
@@ -470,15 +474,108 @@ sc_capture_convert(struct sc_capture *capture, struct sc_capture_pool *pool,
         return false;
     }
 
-    if (surface->w < 2 || surface->h < 2 || surface->w > 0xFFFF
-            || surface->h > 0xFFFF) {
-        return false;
+    return surface->w >= 2 && surface->h >= 2 && surface->w <= 0xFFFF
+        && surface->h <= 0xFFFF;
+}
+
+// Raw copy of the crop area (Y rows, then interleaved chroma rows) of the last
+// pushed NV12/NV21 frame. While the device screen is static, the capture card
+// delivers bit-identical frames: they are detected directly on the captured
+// surface, before any conversion, and neither converted nor rendered again.
+struct sc_capture_prev {
+    uint8_t *data;
+    size_t size;
+    struct sc_capture_rect crop;
+    SDL_PixelFormat format;
+    bool valid;
+};
+
+static inline bool
+sc_capture_rect_equals(struct sc_capture_rect a, struct sc_capture_rect b) {
+    return a.x == b.x && a.y == b.y && a.width == b.width
+        && a.height == b.height;
+}
+
+// Compare (store == false) or store (store == true) the crop area of surface
+static bool
+sc_capture_prev_rows(struct sc_capture_prev *prev, SDL_Surface *surface,
+                     struct sc_capture_rect crop, bool store) {
+    int pitch = surface->pitch;
+    const uint8_t *y_plane = surface->pixels;
+    const uint8_t *chroma = y_plane + (size_t) pitch * surface->h;
+    uint8_t *p = prev->data;
+
+    for (unsigned row = 0; row < crop.height; ++row) {
+        const uint8_t *src = y_plane + (size_t) (crop.y + row) * pitch + crop.x;
+        if (store) {
+            memcpy(p, src, crop.width);
+        } else if (memcmp(p, src, crop.width)) {
+            return false;
+        }
+        p += crop.width;
     }
 
-    struct sc_size frame_size = {surface->w, surface->h};
-    struct sc_size display;
-    struct sc_capture_rect crop =
-        sc_capture_get_crop(capture, frame_size, &display);
+    // Interleaved chroma: crop.width bytes per row, at x = crop.x
+    for (unsigned row = 0; row < crop.height / 2u; ++row) {
+        const uint8_t *src =
+            chroma + (size_t) (crop.y / 2 + row) * pitch + crop.x;
+        if (store) {
+            memcpy(p, src, crop.width);
+        } else if (memcmp(p, src, crop.width)) {
+            return false;
+        }
+        p += crop.width;
+    }
+
+    return true;
+}
+
+static bool
+sc_capture_prev_equals(struct sc_capture_prev *prev, SDL_Surface *surface,
+                       struct sc_capture_rect crop) {
+    if (!prev->valid || prev->format != surface->format
+            || !sc_capture_rect_equals(prev->crop, crop)) {
+        return false;
+    }
+    return sc_capture_prev_rows(prev, surface, crop, false);
+}
+
+static void
+sc_capture_prev_store(struct sc_capture_prev *prev, SDL_Surface *surface,
+                      struct sc_capture_rect crop) {
+    prev->valid = false;
+    if (!sc_capture_is_semi_planar(surface->format)) {
+        return;
+    }
+
+    size_t size = (size_t) crop.width * crop.height * 3 / 2;
+    if (size != prev->size) {
+        uint8_t *data = realloc(prev->data, size);
+        if (!data) {
+            // Not fatal: identical frames are just not skipped
+            free(prev->data);
+            prev->data = NULL;
+            prev->size = 0;
+            return;
+        }
+        prev->data = data;
+        prev->size = size;
+    }
+
+    sc_capture_prev_rows(prev, surface, crop, true);
+    prev->crop = crop;
+    prev->format = surface->format;
+    prev->valid = true;
+}
+
+// Copy the crop area of a NV12/NV21/IYUV/YV12 surface into frame (YUV420P)
+static bool
+sc_capture_convert(struct sc_capture_pool *pool, SDL_Surface *surface,
+                   struct sc_capture_rect crop, SDL_Colorspace colorspace,
+                   AVFrame *frame) {
+    SDL_PixelFormat fmt = surface->format;
+    bool semi_planar = sc_capture_is_semi_planar(fmt);
+
     assert(crop.width && crop.height);
     assert(!(crop.x & 1) && !(crop.y & 1));
     assert(!(crop.width & 1) && !(crop.height & 1));
@@ -538,7 +635,76 @@ sc_capture_convert(struct sc_capture *capture, struct sc_capture_pool *pool,
     }
 
     sc_capture_set_color(frame, colorspace);
-    sc_capture_set_mapping(capture, content, display);
+    return true;
+}
+
+// Open the sinks on the first frame (this opens the window), push a new session
+// on size change, then push the frame (always unreferenced).
+// Return false if the capture must stop (*error is set on error).
+static bool
+sc_capture_push(struct sc_capture *capture, AVCodecContext **pctx,
+                bool *sinks_open, struct sc_size *last_size, AVFrame *frame,
+                bool *error) {
+    struct sc_size size = {frame->width, frame->height};
+    struct sc_stream_session session = {
+        .video = {
+            .width = size.width,
+            .height = size.height,
+            .client_resized = false,
+        },
+    };
+
+    if (!*sinks_open) {
+        AVCodecContext *ctx = avcodec_alloc_context3(NULL);
+        if (!ctx) {
+            LOG_OOM();
+            av_frame_unref(frame);
+            *error = true;
+            return false;
+        }
+        ctx->codec_type = AVMEDIA_TYPE_VIDEO;
+        ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+        ctx->width = size.width;
+        ctx->height = size.height;
+        *pctx = ctx;
+
+        if (!sc_frame_source_sinks_open(&capture->frame_source, ctx,
+                                        &session)) {
+            LOGE("Capture card: could not open the frame sinks");
+            av_frame_unref(frame);
+            *error = true;
+            return false;
+        }
+        *sinks_open = true;
+        *last_size = size;
+    } else if (!sc_size_equals(size, *last_size)) {
+        LOGI("Capture card: content size %" PRIu16 "x%" PRIu16,
+             size.width, size.height);
+        enum sc_sink_result res =
+            sc_frame_source_sinks_push_session(&capture->frame_source,
+                                               &session);
+        if (res != SC_SINK_OK) {
+            if (res == SC_SINK_KO) {
+                LOGE("Capture card: could not push session");
+                *error = true;
+            }
+            av_frame_unref(frame);
+            return false;
+        }
+        *last_size = size;
+    }
+
+    enum sc_sink_result res =
+        sc_frame_source_sinks_push(&capture->frame_source, frame);
+    av_frame_unref(frame);
+    if (res != SC_SINK_OK) {
+        if (res == SC_SINK_KO) {
+            LOGE("Capture card: could not push frame");
+            *error = true;
+        }
+        return false;
+    }
+
     return true;
 }
 
@@ -567,6 +733,7 @@ run_capture(void *data) {
     sc_tick frame_period = 0;
     bool log_open_errors = true;
     struct sc_capture_pool pool = {NULL, {0, 0}};
+    struct sc_capture_prev prev = {0};
 
     AVFrame *frame = av_frame_alloc();
     if (!frame) {
@@ -615,79 +782,44 @@ run_capture(void *data) {
         }
 
         last_frame = sc_tick_now();
-        bool converted = sc_capture_convert(capture, &pool, surface,
-                                            colorspace, frame);
-        SDL_ReleaseCameraFrame(camera, surface);
-        if (!converted) {
-            av_frame_unref(frame);
+        sc_tick deadline = last_frame + frame_period * 3 / 4;
+
+        if (!sc_capture_check_surface(surface)) {
+            SDL_ReleaseCameraFrame(camera, surface);
             continue;
         }
 
-        struct sc_size size = {frame->width, frame->height};
-        if (!sinks_open) {
-            ctx = avcodec_alloc_context3(NULL);
-            if (!ctx) {
-                LOG_OOM();
-                error = true;
-                break;
-            }
-            ctx->codec_type = AVMEDIA_TYPE_VIDEO;
-            ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-            ctx->width = size.width;
-            ctx->height = size.height;
+        struct sc_size frame_size = {surface->w, surface->h};
+        struct sc_size display;
+        struct sc_capture_rect crop =
+            sc_capture_get_crop(capture, frame_size, &display);
+        sc_capture_set_mapping(capture,
+                               (struct sc_size) {crop.width, crop.height},
+                               display);
 
-            struct sc_stream_session session = {
-                .video = {
-                    .width = size.width,
-                    .height = size.height,
-                    .client_resized = false,
-                },
-            };
-            if (!sc_frame_source_sinks_open(&capture->frame_source, ctx,
-                                            &session)) {
-                LOGE("Capture card: could not open the frame sinks");
-                error = true;
-                break;
+        if (sinks_open && sc_capture_prev_equals(&prev, surface, crop)) {
+            // Unchanged content: nothing to convert nor to render
+            SDL_ReleaseCameraFrame(camera, surface);
+        } else {
+            bool converted = sc_capture_convert(&pool, surface, crop,
+                                                colorspace, frame);
+            if (converted) {
+                sc_capture_prev_store(&prev, surface, crop);
             }
-            sinks_open = true;
-            last_size = size;
-        } else if (!sc_size_equals(size, last_size)) {
-            LOGI("Capture card: content size %" PRIu16 "x%" PRIu16,
-                 size.width, size.height);
-            struct sc_stream_session session = {
-                .video = {
-                    .width = size.width,
-                    .height = size.height,
-                    .client_resized = false,
-                },
-            };
-            enum sc_sink_result res =
-                sc_frame_source_sinks_push_session(&capture->frame_source,
-                                                   &session);
-            if (res != SC_SINK_OK) {
-                if (res == SC_SINK_KO) {
-                    LOGE("Capture card: could not push session");
-                    error = true;
-                }
-                break;
+            SDL_ReleaseCameraFrame(camera, surface);
+            if (!converted) {
+                av_frame_unref(frame);
+                continue;
             }
-            last_size = size;
-        }
 
-        enum sc_sink_result res =
-            sc_frame_source_sinks_push(&capture->frame_source, frame);
-        av_frame_unref(frame);
-        if (res != SC_SINK_OK) {
-            if (res == SC_SINK_KO) {
-                LOGE("Capture card: could not push frame");
-                error = true;
+            if (!sc_capture_push(capture, &ctx, &sinks_open, &last_size,
+                                 frame, &error)) {
+                break;
             }
-            break;
         }
 
         // The next frame is not expected before about one frame period:
         // sleep instead of polling every few milliseconds
-        sc_tick deadline = last_frame + frame_period * 3 / 4;
         if (deadline > sc_tick_now() && !sc_capture_wait(capture, deadline)) {
             break;
         }
@@ -703,6 +835,7 @@ end:
     }
     avcodec_free_context(&ctx);
     av_frame_free(&frame);
+    free(prev.data);
     av_buffer_pool_uninit(&pool.pool);
 
     if (error && !sc_capture_is_stopped(capture)) {
