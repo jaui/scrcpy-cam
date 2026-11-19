@@ -355,7 +355,7 @@ static const struct sc_option options[] = {
         .longopt = "capture-card-fps",
         .argdesc = "value",
         .text = "[scrcpy-cam] Requested capture frame rate.\n"
-                "Default is 60.",
+                "Default is 30 (about half the CPU usage of 60).",
     },
     {
         .longopt_id = OPT_CAPTURE_CARD_SIZE,
@@ -2638,6 +2638,9 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
 
     optind = 0; // reset to start from the first argument in tests
 
+    // scrcpy-cam: any --capture-card-* option was passed
+    bool capture_card_opts = false;
+
     int c;
     while ((c = getopt_long(argc, argv, optstring, longopts, NULL)) != -1) {
         switch (c) {
@@ -3025,11 +3028,13 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
                     return false;
                 }
                 opts->capture_card_crop = optarg;
+                capture_card_opts = true;
                 break;
             case OPT_CAPTURE_CARD_FPS:
                 if (!parse_capture_card_fps(optarg, &opts->capture_card_fps)) {
                     return false;
                 }
+                capture_card_opts = true;
                 break;
             case OPT_CAPTURE_CARD_SIZE:
                 if (!parse_capture_card_size(optarg,
@@ -3037,6 +3042,7 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
                                              &opts->capture_card_height)) {
                     return false;
                 }
+                capture_card_opts = true;
                 break;
             case OPT_NO_WINDOW:
                 opts->window = false;
@@ -3197,9 +3203,7 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
 
         // The server must not capture the device screen
         opts->video = false;
-    } else if (opts->capture_card_crop || opts->capture_card_fps != 60
-            || opts->capture_card_width != 1920
-            || opts->capture_card_height != 1080) {
+    } else if (capture_card_opts) {
         LOGE("--capture-card-* options require --capture-card");
         return false;
     }

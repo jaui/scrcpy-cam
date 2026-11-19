@@ -10,7 +10,7 @@
 > scrcpy --capture-card --display-id=2  # z. B. DeX-Display steuern
 > ```
 >
-> Weitere Optionen: `--capture-card-size=1920x1080`, `--capture-card-fps=60`,
+> Weitere Optionen: `--capture-card-size=1920x1080`, `--capture-card-fps=30` (Standard; 60 = flüssiger, doppelte CPU-Last),
 > `--capture-card-crop=W:H:X:Y` (fester Ausschnitt statt automatischer Randerkennung).
 > Schwarze Ränder werden anhand der per adb abgefragten Displaygröße entfernt (auch bei Drehung),
 > Maus/Tastatur werden auf Display-Koordinaten umgerechnet.

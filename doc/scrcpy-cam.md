@@ -79,7 +79,7 @@ Neue Optionen (alle übrigen scrcpy-Optionen gelten weiter, siehe `scrcpy --help
 |---|---|---|
 | `--capture-card[=NAME]` | `UGREEN` | Bild von der Kamera, deren Name `NAME` enthält (Groß-/Kleinschreibung egal). Der Server läuft ohne Video. |
 | `--capture-card-size=BxH` | `1920x1080` | Angeforderte Auflösung der Karte (gerade Werte). |
-| `--capture-card-fps=N` | `60` | Angeforderte Bildrate. |
+| `--capture-card-fps=N` | `30` | Angeforderte Bildrate. 30 fps braucht etwa halb so viel CPU wie 60 fps (siehe [Leistung](#leistung-und-bildschirm)). |
 | `--capture-card-crop=B:H:X:Y` | automatisch | Fester Bildausschnitt statt automatischer Randerkennung. |
 | `--display-id=N` | `0` | Welches Android-Display gesteuert wird (scrcpy-Standardoption). Im Spiegelmodus `0`. |
 
@@ -95,7 +95,40 @@ scrcpy --capture-card="USB Video"              # andere Karte
 scrcpy --capture-card --display-id=2           # z. B. DeX-Display
 scrcpy --capture-card --capture-card-crop=1920:1080:0:0   # ganzer Frame (z. B. DeX)
 scrcpy --capture-card --print-fps              # Bildrate im Terminal anzeigen
+scrcpy --capture-card --capture-card-fps=60    # flüssiger, doppelte CPU-Last
+scrcpy --capture-card --fullscreen             # Full-HD-Bildschirm: Handybild 1:1 in voller Höhe
 ```
+
+### Leistung und Bildschirm
+
+CPU-Last von `scrcpy.exe`, gemessen auf einem i7-1365U mit Testgerät B und UGREEN 25772.
+Gemessen wurden jeweils 20 s, in denen die Benachrichtigungsleiste laufend auf- und zuklappte
+(Prozent eines Kerns, alle Threads):
+
+| Modus | CPU | Bildrate |
+|---|---|---|
+| `--capture-card` (30 fps, Standard) | ≈ 6 % | 30 fps |
+| `--capture-card --capture-card-fps=60` | ≈ 11 % | 60 fps |
+| normales scrcpy (H.264 vom Handy) | ≈ 7 % | 0–61 fps, nur bei Änderungen |
+| normales scrcpy `--max-fps=30` | ≈ 3 % | 0–32 fps |
+
+Die Karte liefert immer volle Bilder, auch wenn sich nichts ändert. Das normale scrcpy sendet
+nur bei Änderungen, zeigt aber `FLAG_SECURE`-Apps schwarz. Für einen schwächeren PC
+(z. B. i5-7300U, 2 Kerne/4 Threads) ist 30 fps der Standard. Grob gerechnet ist ein Kern
+eines i5-7300U halb so schnell wie hier; dann sind etwa 10–15 % eines Kerns zu erwarten.
+
+Fenstergröße: Ohne weitere Optionen öffnet sich das Fenster mit einem Kartenpixel pro
+Bildschirmpixel, also hochkant 498×1080 Bildpunkte. Passt das nicht auf den Bildschirm,
+verkleinert scrcpy das Fenster. Die Bildrate ist dabei egal.
+
+- **Full-HD-Bildschirm (1920×1080):** Mit `--fullscreen` (oder MOD+<kbd>f</kbd>) wird das Bild
+  ohne Skalierung in voller Höhe gezeigt, also 1:1 und scharf. Im Fenstermodus nehmen Taskleiste
+  und Titelzeile Platz weg, deshalb verkleinert scrcpy leicht.
+- **HiDPI-Bildschirm (z. B. 2560×1600, 150 %):** Das Fenster ist zunächst klein (1:1). Größer
+  wird es mit `--window-height=<Pixel>` oder `--fullscreen`. Dann wird hochskaliert, mit
+  etwas weicherem Bild, denn mehr als 1080 Bildzeilen liefert die Karte nicht.
+- Seitenverhältnis: Standard ist `--render-fit=letterbox`, das Bild wird nie verzerrt, und
+  Klicks in die schwarzen Ränder werden ignoriert.
 
 ## 6. Bedienung
 
@@ -260,7 +293,7 @@ git push --force-with-lease origin main
 ### Datenfluss Bild
 
 1. `run_capture` (Thread `scrcpy-capture`) öffnet die erste Kamera, deren Name den Filter
-   enthält, mit `SDL_OpenCamera` im Format **NV12**, 1920×1080, 60 fps.
+   enthält, mit `SDL_OpenCamera` im Format **NV12**, 1920×1080, 30 fps (Standard).
 2. Pro Frame (`SDL_AcquireCameraFrame`): Ausschnitt bestimmen (siehe unten), Y-Zeilen kopieren,
    UV-Werte aus NV12 in getrennte U/V-Ebenen schreiben → `AVFrame` im Format `YUV420P`.
    Die Puffer kommen aus einem `AVBufferPool` (keine Speicherreservierung pro Frame). Nach
@@ -410,6 +443,20 @@ wäre einstellbar, die Abfrage liest immer die aktuelle Größe) und Display 7 �
 | 11 | `settings put global adb_wifi_enabled 0/1` aus einem adb-Shell-Hintergrundprozess | nicht aussagekräftig: der Prozess endet mit der WLAN-adb-Verbindung, Wireless Debugging blieb aus und wurde von Hand eingeschaltet |
 
 Nicht getestet: vollständiger Login mit Freigabe per Authenticator (keine Zugangsdaten verwendet).
+
+### 19.11.2026 – Testgerät B, nach den Review-Korrekturen
+
+| # | Test | Ergebnis |
+|---|---|---|
+| 1 | Handy im Ruhemodus (Dozing), Start mit `--capture-card` | alter Build: bleibt aus; neuer Build: wird geweckt |
+| 2 | Displaygröße über dauerhafte adb-Shell (`wm size` vorübergehend geändert) | Änderung erkannt; kein neuer `adb.exe` pro Sekunde |
+| 3 | scrcpy hart beendet (`Stop-Process -Force`) | Abfrage-Schleife auf Handy und PC nach ≤ 2 s beendet |
+| 4 | Bild 30 fps, Zuschnitt, Wisch von oben, Rechtsklick → Zurück | bestanden |
+| 5 | Launcher unter `powershell.exe` 5.1, adb-Server vorher beendet | läuft weiter |
+| 6 | Launcher `-ScrcpyArgs '--capture-card=USB Video'` | Argument kommt vollständig an |
+| 7 | Launcher mit ungültigem Argument | Abstände 2, 2, 4, 8, 16 … 60 s |
+| 8 | `--capture-card-fps=30` ohne `--capture-card` | Fehlermeldung (vorher bei Standardwert still akzeptiert) |
+| 9 | CPU-Vergleich | siehe [Leistung und Bildschirm](#leistung-und-bildschirm) |
 
 Hinweis zu Tests: Ein `SetForegroundWindow` aus einem Hintergrundprozess wird von Windows oft
 verweigert. Simulierte Tastendrücke landen dann im falschen Fenster. Mausklicks auf
