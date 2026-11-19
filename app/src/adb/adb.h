@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <inttypes.h>
+#include <sys/types.h>
 
 #include "adb/adb_device.h"
 #include "util/intr.h"
@@ -38,6 +39,16 @@ struct sc_adb_device_selector {
 
 sc_pid
 sc_adb_execute(const char *const argv[], unsigned flags);
+
+/**
+ * Execute "adb -s <serial> shell <cmd>" and read its output into buf
+ * (NUL-terminated, truncated to len - 1 bytes).
+ *
+ * Return the number of bytes read, or -1 on error.
+ */
+ssize_t
+sc_adb_shell_read(struct sc_intr *intr, const char *serial, const char *cmd,
+                  char *buf, size_t len, unsigned flags);
 
 bool
 sc_adb_start_server(struct sc_intr *intr, unsigned flags);

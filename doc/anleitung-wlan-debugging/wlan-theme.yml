@@ -1,0 +1,11 @@
+extends: default
+page:
+  margin: [1.6cm, 1.8cm, 1.6cm, 1.8cm]
+base:
+  text-align: left
+  font-size: 10.5
+heading:
+  h2-font-size: 16
+  margin-top: 8
+caption:
+  font-size: 9

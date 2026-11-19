@@ -699,6 +699,33 @@ sc_adb_getprop(struct sc_intr *intr, const char *serial, const char *prop,
     return strdup(buf);
 }
 
+ssize_t
+sc_adb_shell_read(struct sc_intr *intr, const char *serial, const char *cmd,
+                  char *buf, size_t len, unsigned flags) {
+    assert(serial);
+    assert(len);
+    const char *const argv[] = SC_ADB_COMMAND("-s", serial, "shell", cmd);
+
+    sc_pipe pout;
+    sc_pid pid = sc_adb_execute_p(argv, flags, &pout);
+    if (pid == SC_PROCESS_NONE) {
+        LOGD("Could not execute \"adb shell %s\"", cmd);
+        return -1;
+    }
+
+    ssize_t r = sc_pipe_read_all_intr(intr, pid, pout, buf, len - 1);
+    sc_pipe_close(pout);
+
+    bool ok = process_check_success_intr(intr, pid, "adb shell", flags);
+    if (!ok || r == -1) {
+        return -1;
+    }
+
+    assert((size_t) r < len);
+    buf[r] = '\0';
+    return r;
+}
+
 char *
 sc_adb_get_device_ip(struct sc_intr *intr, const char *serial, unsigned flags) {
     assert(serial);

@@ -6,6 +6,8 @@ src = [
     'src/adb/adb_tunnel.c',
     'src/audio_player.c',
     'src/audio_regulator.c',
+    'src/capture.c',
+    'src/capture_geometry.c',
     'src/cli.c',
     'src/clock.c',
     'src/compat.c',
@@ -284,8 +286,13 @@ if get_option('buildtype') == 'debug'
             'src/util/audiobuf.c',
             'src/util/memory.c',
         ]],
+        ['test_capture_geometry', [
+            'tests/test_capture_geometry.c',
+            'src/capture_geometry.c',
+        ]],
         ['test_cli', [
             'tests/test_cli.c',
+            'src/capture_geometry.c',
             'src/cli.c',
             'src/options.c',
             'src/util/log.c',

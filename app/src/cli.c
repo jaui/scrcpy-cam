@@ -8,6 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "capture_geometry.h"
 #include "options.h"
 #include "util/log.h"
 #include "util/net.h"
@@ -112,6 +113,10 @@ enum {
     OPT_IGNORE_VIDEO_ENCODER_CONSTRAINTS,
     OPT_NO_TERMINAL_TITLE,
     OPT_HWDEC,
+    OPT_CAPTURE_CARD,
+    OPT_CAPTURE_CARD_CROP,
+    OPT_CAPTURE_CARD_FPS,
+    OPT_CAPTURE_CARD_SIZE,
 };
 
 struct sc_option {
@@ -322,6 +327,42 @@ static const struct sc_option options[] = {
         .longopt = "camera-zoom",
         .argdesc = "zoom",
         .text = "Specify the camera zoom initial value.",
+    },
+    {
+        .longopt_id = OPT_CAPTURE_CARD,
+        .longopt = "capture-card",
+        .argdesc = "name",
+        .optional_arg = true,
+        .text = "[scrcpy-cam] Display the video from a capture card connected "
+                "to the computer (the device HDMI output) instead of the "
+                "device video stream. The device is only controlled (the "
+                "server runs without video), so apps protected by FLAG_SECURE "
+                "remain visible.\n"
+                "The capture device is the first camera whose name contains "
+                "<name> (case-insensitive). Default is \"UGREEN\".\n"
+                "The black borders are removed automatically, according to the "
+                "current size of the controlled display (--display-id).",
+    },
+    {
+        .longopt_id = OPT_CAPTURE_CARD_CROP,
+        .longopt = "capture-card-crop",
+        .argdesc = "width:height:x:y",
+        .text = "[scrcpy-cam] Use a fixed area of the capture frame instead of "
+                "the automatic detection.",
+    },
+    {
+        .longopt_id = OPT_CAPTURE_CARD_FPS,
+        .longopt = "capture-card-fps",
+        .argdesc = "value",
+        .text = "[scrcpy-cam] Requested capture frame rate.\n"
+                "Default is 60.",
+    },
+    {
+        .longopt_id = OPT_CAPTURE_CARD_SIZE,
+        .longopt = "capture-card-size",
+        .argdesc = "<width>x<height>",
+        .text = "[scrcpy-cam] Requested capture frame size.\n"
+                "Default is 1920x1080.",
     },
     {
         .longopt_id = OPT_CAPTURE_ORIENTATION,
@@ -2199,6 +2240,49 @@ parse_camera_fps(const char *s, uint16_t *camera_fps) {
 }
 
 static bool
+parse_capture_card_size(const char *s, uint16_t *width, uint16_t *height) {
+    char *end;
+    long w = strtol(s, &end, 10);
+    if (end == s || *end != 'x') {
+        LOGE("Invalid capture card size (expected <width>x<height>): %s", s);
+        return false;
+    }
+    const char *hs = end + 1;
+    long h = strtol(hs, &end, 10);
+    if (end == hs || *end != '\0' || w <= 0 || h <= 0 || w > 0xFFFF
+            || h > 0xFFFF || (w & 1) || (h & 1)) {
+        LOGE("Invalid capture card size (expected even positive values): %s",
+             s);
+        return false;
+    }
+    *width = (uint16_t) w;
+    *height = (uint16_t) h;
+    return true;
+}
+
+static bool
+parse_capture_card_fps(const char *s, uint16_t *fps) {
+    long value;
+    bool ok = parse_integer_arg(s, &value, false, 1, 1000, "capture card fps");
+    if (!ok) {
+        return false;
+    }
+
+    *fps = (uint16_t) value;
+    return true;
+}
+
+static bool
+parse_capture_card_crop(const char *s) {
+    struct sc_capture_rect rect;
+    if (!sc_capture_geometry_parse_crop(s, &rect)) {
+        LOGE("Invalid capture card crop (expected width:height:x:y): %s", s);
+        return false;
+    }
+    return true;
+}
+
+static bool
 parse_keyboard(const char *optarg, enum sc_keyboard_input_mode *mode) {
     if (!strcmp(optarg, "disabled")) {
         *mode = SC_KEYBOARD_INPUT_MODE_DISABLED;
@@ -2933,6 +3017,27 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
             case OPT_CAMERA_ZOOM:
                 opts->camera_zoom = optarg;
                 break;
+            case OPT_CAPTURE_CARD:
+                opts->capture_card = optarg ? optarg : "UGREEN";
+                break;
+            case OPT_CAPTURE_CARD_CROP:
+                if (!parse_capture_card_crop(optarg)) {
+                    return false;
+                }
+                opts->capture_card_crop = optarg;
+                break;
+            case OPT_CAPTURE_CARD_FPS:
+                if (!parse_capture_card_fps(optarg, &opts->capture_card_fps)) {
+                    return false;
+                }
+                break;
+            case OPT_CAPTURE_CARD_SIZE:
+                if (!parse_capture_card_size(optarg,
+                                             &opts->capture_card_width,
+                                             &opts->capture_card_height)) {
+                    return false;
+                }
+                break;
             case OPT_NO_WINDOW:
                 opts->window = false;
                 break;
@@ -3047,6 +3152,62 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
     v4l2 = !!opts->v4l2_device;
 #endif
 
+    if (opts->capture_card) {
+        // scrcpy-cam: the video comes from a local capture card, the server
+        // only handles control
+        if (!opts->window) {
+            LOGE("--capture-card requires a window (remove --no-window)");
+            return false;
+        }
+        if (!opts->control) {
+            LOGE("--capture-card requires control (remove -n/--no-control)");
+            return false;
+        }
+        if (otg) {
+            LOGE("--capture-card is not available in OTG mode");
+            return false;
+        }
+        if (opts->video_source != SC_VIDEO_SOURCE_DISPLAY) {
+            LOGE("--capture-card is only available with "
+                 "--video-source=display");
+            return false;
+        }
+        if (opts->record_filename) {
+            LOGE("--capture-card is incompatible with recording");
+            return false;
+        }
+        if (opts->new_display) {
+            LOGE("--capture-card is incompatible with --new-display");
+            return false;
+        }
+        if (opts->flex_display) {
+            LOGE("--capture-card is incompatible with -x/--flex-display");
+            return false;
+        }
+        if (v4l2) {
+            LOGE("--capture-card is incompatible with V4L2");
+            return false;
+        }
+        if (opts->hwdec_mode != SC_HWDEC_MODE_AUTO
+                && opts->hwdec_mode != SC_HWDEC_MODE_DISABLED) {
+            LOGE("--capture-card frames are not decoded, --hwdec is "
+                 "meaningless");
+            return false;
+        }
+
+        // The server must not capture the device screen
+        opts->video = false;
+    } else if (opts->capture_card_crop || opts->capture_card_fps != 60
+            || opts->capture_card_width != 1920
+            || opts->capture_card_height != 1080) {
+        LOGE("--capture-card-* options require --capture-card");
+        return false;
+    }
+
+    // The window displays video (from the device or from the capture card)
+    bool displays_video = opts->window
+                       && (opts->video_playback || opts->capture_card);
+
     if (!opts->window) {
         // Without window, there cannot be any video playback
         opts->video_playback = false;
@@ -3080,7 +3241,7 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
         return false;
     }
 
-    if (!opts->video && !otg) {
+    if (!opts->video && !otg && !opts->capture_card) {
         // If video is disabled, then scrcpy must exit on audio failure.
         opts->require_audio = true;
     }
@@ -3153,7 +3314,7 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
         if (opts->mouse_input_mode == SC_MOUSE_INPUT_MODE_AUTO) {
             if (otg) {
                 opts->mouse_input_mode = SC_MOUSE_INPUT_MODE_AOA;
-            } else if (!opts->video_playback) {
+            } else if (!displays_video) {
                 LOGI("No video mirroring, SDK mouse disabled");
                 opts->mouse_input_mode = SC_MOUSE_INPUT_MODE_DISABLED;
             } else {
@@ -3163,7 +3324,7 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
             opts->mouse_input_mode = otg ? SC_MOUSE_INPUT_MODE_AOA
                                          : SC_MOUSE_INPUT_MODE_UHID;
         } else if (opts->mouse_input_mode == SC_MOUSE_INPUT_MODE_SDK
-                    && !opts->video_playback) {
+                    && !displays_video) {
             LOGE("SDK mouse mode requires video playback. Try --mouse=uhid.");
             return false;
         }
@@ -3537,7 +3698,7 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
     }
 # endif
 
-    if (opts->start_fps_counter && !opts->video_playback) {
+    if (opts->start_fps_counter && !displays_video) {
         LOGW("--print-fps has no effect without video playback");
         opts->start_fps_counter = false;
     }

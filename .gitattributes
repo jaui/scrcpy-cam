@@ -1,0 +1,4 @@
+# Shell scripts run inside the Linux build container: always LF
+*.sh text eol=lf
+release/build_common text eol=lf
+cross_*.txt text eol=lf

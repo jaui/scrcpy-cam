@@ -66,7 +66,20 @@ sc_controller_init(struct sc_controller *controller, sc_socket control_socket,
     controller->cbs = cbs;
     controller->cbs_userdata = cbs_userdata;
 
+    controller->map_position = NULL;
+    controller->map_position_userdata = NULL;
+
     return true;
+}
+
+void
+sc_controller_set_position_mapper(struct sc_controller *controller,
+                                  void (*map)(struct sc_position *position,
+                                              void *userdata),
+                                  void *userdata) {
+    // Must be called before any message is pushed
+    controller->map_position = map;
+    controller->map_position_userdata = userdata;
 }
 
 void
@@ -97,6 +110,21 @@ sc_controller_push_msg(struct sc_controller *controller,
                        const struct sc_control_msg *msg) {
     // RESIZE_DISPLAY messages are handled separately
     assert(msg->type != SC_CONTROL_MSG_TYPE_RESIZE_DISPLAY);
+
+    struct sc_control_msg mapped;
+    if (controller->map_position) {
+        if (msg->type == SC_CONTROL_MSG_TYPE_INJECT_TOUCH_EVENT) {
+            mapped = *msg;
+            controller->map_position(&mapped.inject_touch_event.position,
+                                     controller->map_position_userdata);
+            msg = &mapped;
+        } else if (msg->type == SC_CONTROL_MSG_TYPE_INJECT_SCROLL_EVENT) {
+            mapped = *msg;
+            controller->map_position(&mapped.inject_scroll_event.position,
+                                     controller->map_position_userdata);
+            msg = &mapped;
+        }
+    }
 
     bool pushed = false;
 

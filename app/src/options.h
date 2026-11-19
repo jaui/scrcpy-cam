@@ -278,6 +278,13 @@ struct scrcpy_options {
     const char *camera_ar;
     const char *camera_zoom;
     uint16_t camera_fps;
+    // scrcpy-cam: video from a local capture card (HDMI grabber) instead of
+    // the device stream; NULL if disabled, otherwise a camera name filter
+    const char *capture_card;
+    const char *capture_card_crop; // "width:height:x:y", NULL for auto
+    uint16_t capture_card_width;
+    uint16_t capture_card_height;
+    uint16_t capture_card_fps;
     enum sc_log_level log_level;
     enum sc_codec video_codec;
     enum sc_codec audio_codec;

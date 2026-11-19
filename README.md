@@ -1,3 +1,45 @@
+> [!NOTE]
+> **scrcpy-cam – inoffizieller Fork von scrcpy 5.0.1.**
+> Ziel: Ein Android-Handy vom PC aus bedienen, auch Apps mit `FLAG_SECURE` (z. B. Banking,
+> Authenticator), die normales scrcpy schwarz zeigt. Das Bild kommt über HDMI und eine
+> USB-Capture-Karte (UGREEN 25772), die Steuerung über den unveränderten scrcpy-Server per ADB/WLAN.
+>
+> ```
+> scrcpy --capture-card                 # Kamera mit "UGREEN" im Namen, steuert Display 0
+> scrcpy --capture-card="USB Video"     # andere Capture-Karte (Teil des Namens)
+> scrcpy --capture-card --display-id=2  # z. B. DeX-Display steuern
+> ```
+>
+> Weitere Optionen: `--capture-card-size=1920x1080`, `--capture-card-fps=60`,
+> `--capture-card-crop=W:H:X:Y` (fester Ausschnitt statt automatischer Randerkennung).
+> Schwarze Ränder werden anhand der per adb abgefragten Displaygröße entfernt (auch bei Drehung),
+> Maus/Tastatur werden auf Display-Koordinaten umgerechnet.
+> Nicht verwenden: `--turn-screen-off` – beim Spiegeln wird damit auch das HDMI-Bild schwarz.
+>
+> Dauerbetrieb: `tools/scrcpy-cam.ps1 -ScrcpyArgs '--fullscreen'` verbindet nach WLAN-Abbruch
+> oder Portwechsel selbst neu (mDNS) und startet scrcpy neu; Fenster schließen beendet den Launcher.
+>
+> **Vollständige Dokumentation: [`doc/scrcpy-cam.md`](doc/scrcpy-cam.md)** (Aufbau, Optionen,
+> Bedienung, Bauen, Interna, Entscheidungen, Testprotokoll, Fehlersuche).
+>
+> Bauen: `tools/build-windows.ps1` (Docker). Handy einrichten: [`tools/SETUP-PHONE.md`](tools/SETUP-PHONE.md).
+> Python-Prototyp: [`tools/python-prototype`](tools/python-prototype).
+> Upstream: <https://github.com/Genymobile/scrcpy>. Fehler in diesem Fork bitte nicht upstream melden.
+
+### Kompatibilität
+
+Getestet mit `--capture-card` im Spiegelmodus, Capture-Karte UGREEN 25772, Windows 11
+(Stand 19.11.2026). Details: [Testprotokoll](doc/scrcpy-cam.md#12-testprotokoll).
+
+| Gerät | Android / One UI | Bild + Steuerung | Drehung | `FLAG_SECURE`-Apps über HDMI | Testprotokoll |
+|---|---|---|---|---|---|
+| Samsung Galaxy S20 FE 5G (SM-G781B) | 13 / 5.1 | ✅ | ✅ | nicht getestet | Testgerät A |
+| Samsung Galaxy S25+ (SM-S936B) | 17 / 9.0 | ✅ | ✅ | ✅ sichtbar und bedienbar | Testgerät B |
+| Samsung Galaxy S23-Serie | – | nicht getestet | | | |
+
+Voraussetzung am Handy: Bildausgabe über USB-C (DisplayPort-Alt-Mode) und Wireless Debugging
+(Android 11+). Weitere Geräte und Ergebnisse gern als Issue melden.
+
 > [!WARNING]
 > **This GitHub repo (<https://github.com/Genymobile/scrcpy>) is the only official
 source for the project. Do not download releases from random websites, even if

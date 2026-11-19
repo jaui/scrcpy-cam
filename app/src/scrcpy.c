@@ -15,6 +15,7 @@
 #endif
 
 #include "audio_player.h"
+#include "capture.h"
 #include "controller.h"
 #include "decoder.h"
 #include "demuxer.h"
@@ -67,6 +68,7 @@ struct scrcpy {
     struct sc_video_regulator v4l2_regulator;
 #endif
     struct sc_controller controller;
+    struct sc_capture capture; // scrcpy-cam: --capture-card
     struct sc_file_pusher file_pusher;
 #ifdef HAVE_USB
     struct sc_usb usb;
@@ -417,6 +419,8 @@ scrcpy(struct scrcpy_options *options) {
     bool controller_initialized = false;
     bool controller_started = false;
     bool screen_initialized = false;
+    bool capture_initialized = false;
+    bool capture_started = false;
     bool timeout_initialized = false;
     bool timeout_started = false;
     bool disconnected = false;
@@ -534,6 +538,13 @@ scrcpy(struct scrcpy_options *options) {
             } else {
                 LOGW("Could not initialize SDL video: %s", SDL_GetError());
             }
+        }
+    }
+
+    if (options->capture_card) {
+        if (!SDL_Init(SDL_INIT_CAMERA)) {
+            LOGE("Could not initialize SDL camera: %s", SDL_GetError());
+            goto end;
         }
     }
 
@@ -814,7 +825,8 @@ aoa_complete:
 
     if (options->window) {
         struct sc_screen_params screen_params = {
-            .video = options->video_playback,
+            // With --capture-card, the window displays the capture card frames
+            .video = options->video_playback || options->capture_card,
             .camera = options->video_source == SC_VIDEO_SOURCE_CAMERA,
             .flex_display = options->flex_display,
             .controller = controller,
@@ -962,6 +974,37 @@ aoa_complete:
     }
 #endif
 
+    if (options->capture_card) {
+        assert(options->window && screen_initialized);
+        assert(controller);
+
+        struct sc_capture_params capture_params = {
+            .name_filter = options->capture_card,
+            .width = options->capture_card_width,
+            .height = options->capture_card_height,
+            .fps = options->capture_card_fps,
+            .crop = options->capture_card_crop,
+            .serial = serial,
+            .display_id = options->display_id,
+        };
+        if (!sc_capture_init(&s->capture, &capture_params)) {
+            goto end;
+        }
+        capture_initialized = true;
+
+        sc_frame_source_add_sink(&s->capture.frame_source,
+                                 &s->screen.frame_sink);
+        // The server runs without video: positions must be expressed in
+        // device display coordinates
+        sc_controller_set_position_mapper(controller, sc_capture_map_position,
+                                          &s->capture);
+
+        if (!sc_capture_start(&s->capture)) {
+            goto end;
+        }
+        capture_started = true;
+    }
+
     // Now that the header values have been consumed, the socket(s) will
     // receive the stream(s). Start the demuxer(s).
 
@@ -1066,6 +1109,9 @@ end:
     if (video_decoder_started) {
         sc_decoder_stop(&s->video_decoder);
     }
+    if (capture_started) {
+        sc_capture_stop(&s->capture);
+    }
     if (audio_decoder_started) {
         sc_decoder_stop(&s->audio_decoder);
     }
@@ -1102,6 +1148,13 @@ end:
 
     if (video_decoder_started) {
         sc_decoder_join(&s->video_decoder);
+    }
+
+    if (capture_started) {
+        sc_capture_join(&s->capture);
+    }
+    if (capture_initialized) {
+        sc_capture_destroy(&s->capture);
     }
 
     if (audio_decoder_started) {

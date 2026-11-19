@@ -1,0 +1,172 @@
+= Debugging über WLAN einschalten
+:author: scrcpy-cam
+:revdate: 19.11.2026
+:lang: de
+:toc: macro
+:toc-title: Inhalt
+:imagesdir: img
+:data-uri:
+:webfonts!:
+:icons: font
+:figure-caption!:
+:pdf-page-size: A4
+:pdf-theme: wlan-theme.yml
+
+Gezeigt mit Samsung One UI 9 (Android 17). In anderen One-UI-Versionen sind die Wege gleich,
+nur die Bilder sehen etwas anders aus.
+
+*Wozu?* Der PC steuert das Handy über „Debugging über WLAN“ (Wireless Debugging).
+Nach einem Neustart des Handys oder wenn das WLAN weg war, ist diese Funktion aus.
+Dann kann der PC das Handy nicht mehr steuern, bis sie wieder eingeschaltet ist.
+
+toc::[]
+
+== Kurzfassung (Alltag)
+
+Wenn der PC das Handy nicht mehr steuert:
+
+. Handy entsperren (PIN).
+. *Einstellungen → Entwickleroptionen → Debugging über WLAN* einschalten.
+. Falls gefragt: *Zulassen*, dabei *„In diesem Netzwerk immer zulassen“* ankreuzen.
+. Fertig. Der PC verbindet sich nach wenigen Sekunden von selbst. Kein neuer Code nötig.
+
+Noch schneller geht es mit der Schnellkachel (siehe <<kachel>>).
+
+<<<
+== Einmalig: Entwickleroptionen freischalten
+
+Nur nötig, wenn unter Einstellungen noch keine *Entwickleroptionen* stehen.
+
+[cols="1,1",frame=none,grid=none]
+|===
+a|
+.Einstellungen, ganz nach unten scrollen
+image::02-einstellungen-unten.png[Einstellungen,width=260,pdfwidth=4.9cm]
+a|
+. *Einstellungen* öffnen und ganz nach unten scrollen.
+. *Telefoninfo* antippen (1).
+
+Später steht direkt darunter *Entwickleroptionen* (4).
+|===
+
+[cols="1,1",frame=none,grid=none]
+|===
+a|
+.Telefoninfo
+image::03-telefoninfo.png[Telefoninfo,width=260,pdfwidth=4.9cm]
+a|
+[start=3]
+. *Softwareinformationen* antippen (2).
+|===
+
+[cols="1,1",frame=none,grid=none]
+|===
+a|
+.Softwareinformationen
+image::04-softwareinfo.png[Softwareinformationen,width=260,pdfwidth=4.9cm]
+a|
+[start=4]
+. *7-mal schnell auf Buildnummer* tippen (3).
+. PIN eingeben.
+. Meldung: „Entwicklermodus wurde aktiviert“.
+|===
+
+== Einmalig: Entwickleroptionen einstellen
+
+[cols="1,1",frame=none,grid=none]
+|===
+a|
+.Entwickleroptionen (oben)
+image::05-entwickleroptionen.png[Entwickleroptionen,width=260,pdfwidth=4.9cm]
+a|
+*Einstellungen → Entwickleroptionen* (4):
+
+* Schalter ganz oben muss *Ein* sein (5).
+* *Display aktiv lassen* (6) einschalten.
+  Dann geht der Bildschirm beim Laden nicht aus.
+|===
+
+[cols="1,1",frame=none,grid=none]
+|===
+a|
+.Entwickleroptionen, Abschnitt „Debugging“
+image::06-debugging.png[Debugging,width=260,pdfwidth=4.9cm]
+a|
+Nach unten scrollen bis *Debugging*:
+
+* *Debugging über WLAN* (7): Schalter rechts *einschalten*.
+  Beim ersten Mal in einem WLAN fragt das Handy, ob das Netzwerk vertrauenswürdig ist:
+  *„In diesem Netzwerk immer zulassen“* ankreuzen und *Zulassen*.
+* *adb-Autorisierungs-Timeout deaktiv.* (8) *einschalten*.
+  Sonst verfällt die Kopplung mit dem PC nach 7 Tagen ohne Verbindung.
+* *USB-Debugging* wird nicht gebraucht.
+|===
+
+TIP: Tippt man auf den *Text* „Debugging über WLAN“ (nicht auf den Schalter), öffnet sich die
+Detailseite (nächster Abschnitt).
+
+== Nur bei Bedarf: Handy neu mit dem PC koppeln
+
+Normalerweise nicht nötig. Die Kopplung bleibt auch nach Neustart oder WLAN-Wechsel erhalten.
+Neu koppeln nur, wenn der PC neu ist, „Gekoppelte Geräte“ leer ist oder die Kopplung gelöscht wurde.
+
+[cols="1,1",frame=none,grid=none]
+|===
+a|
+.Debugging über WLAN (Detailseite)
+image::07-wlan-debugging.png[Debugging über WLAN,width=260,pdfwidth=4.9cm]
+a|
+* Oben muss *Ein* stehen (9).
+* Unter *Gekoppelte Geräte* steht der PC, wenn er gekoppelt ist.
+* *Gerät über einen Kopplungscode koppeln* (10) antippen.
+|===
+
+[cols="1,1",frame=none,grid=none]
+|===
+a|
+.Kopplungscode
+image::08-kopplungscode.png[Kopplungscode,width=260,pdfwidth=4.9cm]
+a|
+Das Handy zeigt einen *6-stelligen Code* und *IP-Adresse & Port*.
+Am PC (Ordner mit `adb.exe`) eingeben:
+
+[source,text]
+----
+adb pair <IP-Adresse>:<Port> <Code>
+----
+
+Danach verbindet der PC von selbst.
+Den Dialog offen lassen, bis am PC „Successfully paired“ erscheint.
+
+Den Code nicht weitergeben: Wer ihn hat und im selben WLAN ist, kann das Handy steuern.
+|===
+
+<<<
+[[kachel]]
+== Tipp: Schnellkachel „Debugging über WLAN“
+
+Damit geht das Einschalten mit zwei Wischern und einem Tipp, ohne Einstellungen.
+
+[cols="1,1",frame=none,grid=none]
+|===
+a|
+.Entwicklerkacheln für Schnelleinstellungen
+image::09-kacheln.png[Entwicklerkacheln,width=260,pdfwidth=4.9cm]
+a|
+. *Entwickleroptionen → Entwicklerkacheln f. Schnelleinst.* öffnen
+  (steht kurz über dem Abschnitt „Debugging“).
+. *Debugging über WLAN* einschalten (rot markiert).
+. Zweimal von oben wischen → Stift-Symbol (*Bearbeiten*) → Kachel *Debugging über WLAN*
+  in die Schnelleinstellungen ziehen.
+
+Ab dann: von oben wischen, Kachel antippen. Langes Drücken auf die Kachel öffnet die Detailseite.
+|===
+
+== Gut zu wissen
+
+* Der *Port* (Zahl hinter der IP) ändert sich bei jedem Einschalten. Das ist egal,
+  der PC findet das Handy trotzdem.
+* Nach einem *Neustart* muss das Handy zuerst mit PIN entsperrt werden.
+  Erst danach lässt sich „Debugging über WLAN“ einschalten.
+* PC und Handy müssen im *selben WLAN* sein (kein Gäste-WLAN).
+* Neustarts vermeiden: siehe Einrichtungs-Checkliste `tools/SETUP-PHONE.md`.
