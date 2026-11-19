@@ -65,7 +65,8 @@ Bebilderte Anleitung (HTML/PDF): [`doc/anleitung-wlan-debugging/`](../doc/anleit
    adb shell pm grant com.arlosoft.macrodroid android.permission.WRITE_SECURE_SETTINGS
    ```
 3. Makro anlegen:
-   - Auslöser: **Gerätestart**, **WLAN verbunden (<eigene SSID>)**, **Regelmäßig alle 5 Minuten**
+   - Auslöser: **Gerätestart**, **Bildschirm entsperrt**, **WLAN verbunden (<eigene SSID>)**,
+     **Regelmäßig alle 5 Minuten** (Apps laufen nach einem Neustart erst nach dem ersten Entsperren)
    - Aktion: **Systemeinstellung ändern** → Typ *Global* → `adb_wifi_enabled` = `1`
      (zusätzlich `adb_enabled` = `1`)
 4. Akku → Hintergrundnutzungslimits: MacroDroid unter **Nie in den Standby versetzen** eintragen.
@@ -79,6 +80,8 @@ Bebilderte Anleitung (HTML/PDF): [`doc/anleitung-wlan-debugging/`](../doc/anleit
 
 ## 7. Bekannte Grenze: Neustart
 
-Nach einem Neustart muss einmal am Handy die PIN eingegeben werden. Erst danach laufen MacroDroid und
-Wireless Debugging. Eine Lösung ohne Eingriff am Gerät (Bluetooth-Tastatur-Emulation, funktioniert auf
-dem Sperrbildschirm) ist ein späterer Ausbauschritt.
+Nach einem Neustart muss einmal die PIN eingegeben werden. Erst danach laufen MacroDroid und
+Wireless Debugging. Ohne Eingriff am Gerät geht das mit einer Bluetooth-Tastatur-Emulation per ESP32
+([`tools/bt-hid`](bt-hid)): Sie verbindet sich schon vor dem ersten Entsperren und kann die PIN
+eingeben. Dafür einmalig koppeln (siehe dort). Wireless Debugging danach von Hand oder per
+Automations-App (Abschnitt 5) einschalten.

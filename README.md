@@ -23,6 +23,8 @@
 > Bedienung, Bauen, Interna, Entscheidungen, Testprotokoll, Fehlersuche).
 >
 > Bauen: `tools/build-windows.ps1` (Docker). Handy einrichten: [`tools/SETUP-PHONE.md`](tools/SETUP-PHONE.md).
+> Rückfallebene nach Neustart des Handys (PIN eingeben ohne adb): Bluetooth-Tastatur per ESP32,
+> [`tools/bt-hid`](tools/bt-hid).
 > Python-Prototyp: [`tools/python-prototype`](tools/python-prototype).
 > Upstream: <https://github.com/Genymobile/scrcpy>. Fehler in diesem Fork bitte nicht upstream melden.
 
