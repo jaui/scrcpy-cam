@@ -145,6 +145,9 @@ event_loop(struct scrcpy *s, bool has_screen) {
             case SC_EVENT_AOA_OPEN_ERROR:
                 LOGE("AOA open error");
                 return SCRCPY_EXIT_FAILURE;
+            case SC_EVENT_CAPTURE_ERROR:
+                LOGE("Capture card error");
+                return SCRCPY_EXIT_FAILURE;
             case SC_EVENT_TIME_LIMIT_REACHED:
                 LOGI("Time limit reached");
                 return SCRCPY_EXIT_SUCCESS;

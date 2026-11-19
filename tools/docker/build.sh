@@ -31,7 +31,9 @@ export VERSION="${VERSION:-5.0.1-cam}"
 bash release/build_windows.sh 64
 
 DIST=/build/release/work/build-win64/dist
-rm -rf /out/scrcpy-cam-win64
+# Replace the content only: the directory itself may be in use on the Windows
+# side (e.g. current directory of a shell)
 mkdir -p /out/scrcpy-cam-win64
+find /out/scrcpy-cam-win64 -mindepth 1 -delete
 cp -r "$DIST"/. /out/scrcpy-cam-win64/
 echo "Fertig: /out/scrcpy-cam-win64"

@@ -699,17 +699,28 @@ sc_adb_getprop(struct sc_intr *intr, const char *serial, const char *prop,
     return strdup(buf);
 }
 
+sc_pid
+sc_adb_shell_stream(const char *serial, const char *cmd, unsigned flags,
+                    sc_pipe *pout) {
+    assert(serial);
+    assert(pout);
+    const char *const argv[] = SC_ADB_COMMAND("-s", serial, "shell", cmd);
+
+    sc_pid pid = sc_adb_execute_p(argv, flags, pout);
+    if (pid == SC_PROCESS_NONE) {
+        LOGD("Could not execute \"adb shell %s\"", cmd);
+    }
+    return pid;
+}
+
 ssize_t
 sc_adb_shell_read(struct sc_intr *intr, const char *serial, const char *cmd,
                   char *buf, size_t len, unsigned flags) {
-    assert(serial);
     assert(len);
-    const char *const argv[] = SC_ADB_COMMAND("-s", serial, "shell", cmd);
 
     sc_pipe pout;
-    sc_pid pid = sc_adb_execute_p(argv, flags, &pout);
+    sc_pid pid = sc_adb_shell_stream(serial, cmd, flags, &pout);
     if (pid == SC_PROCESS_NONE) {
-        LOGD("Could not execute \"adb shell %s\"", cmd);
         return -1;
     }
 

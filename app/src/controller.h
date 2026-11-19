@@ -37,8 +37,9 @@ struct sc_controller {
     void *cbs_userdata;
 
     // scrcpy-cam: optional hook to transform positional events (touch and
-    // scroll) before they are sent (used by --capture-card)
-    void (*map_position)(struct sc_position *position, void *userdata);
+    // scroll) before they are sent (used by --capture-card). If it returns
+    // false, the event is dropped.
+    bool (*map_position)(struct sc_position *position, void *userdata);
     void *map_position_userdata;
 };
 
@@ -59,7 +60,7 @@ sc_controller_configure(struct sc_controller *controller,
 
 void
 sc_controller_set_position_mapper(struct sc_controller *controller,
-                                  void (*map)(struct sc_position *position,
+                                  bool (*map)(struct sc_position *position,
                                               void *userdata),
                                   void *userdata);
 

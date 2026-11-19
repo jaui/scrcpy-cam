@@ -74,7 +74,7 @@ sc_controller_init(struct sc_controller *controller, sc_socket control_socket,
 
 void
 sc_controller_set_position_mapper(struct sc_controller *controller,
-                                  void (*map)(struct sc_position *position,
+                                  bool (*map)(struct sc_position *position,
                                               void *userdata),
                                   void *userdata) {
     // Must be called before any message is pushed
@@ -113,15 +113,22 @@ sc_controller_push_msg(struct sc_controller *controller,
 
     struct sc_control_msg mapped;
     if (controller->map_position) {
+        struct sc_position *position = NULL;
         if (msg->type == SC_CONTROL_MSG_TYPE_INJECT_TOUCH_EVENT) {
             mapped = *msg;
-            controller->map_position(&mapped.inject_touch_event.position,
-                                     controller->map_position_userdata);
-            msg = &mapped;
+            position = &mapped.inject_touch_event.position;
         } else if (msg->type == SC_CONTROL_MSG_TYPE_INJECT_SCROLL_EVENT) {
             mapped = *msg;
-            controller->map_position(&mapped.inject_scroll_event.position,
-                                     controller->map_position_userdata);
+            position = &mapped.inject_scroll_event.position;
+        }
+        if (position) {
+            if (!controller->map_position(position,
+                                          controller->map_position_userdata)) {
+                // The position cannot be mapped (yet): drop the event rather
+                // than injecting it at a wrong location
+                LOGD("Positional event dropped (unknown display size)");
+                return true;
+            }
             msg = &mapped;
         }
     }

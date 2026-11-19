@@ -22,6 +22,12 @@
  * crop area and to map input events to device display coordinates (the server
  * runs without video, so it expects raw display coordinates).
  */
+// Relation between the frames produced and the device display
+struct sc_capture_mapping {
+    struct sc_size content; // size of the produced frames (crop area)
+    struct sc_size display; // display size used for the crop (0 if unknown)
+};
+
 struct sc_capture {
     struct sc_frame_source frame_source; // frame source trait
 
@@ -46,7 +52,12 @@ struct sc_capture {
 
     // current size of the controlled display (0 if unknown)
     struct sc_size display_size; // protected by mutex
-    unsigned rotation; // protected by mutex
+    unsigned rotation; // protected by mutex, for logging
+
+    // The two most recent mappings ([0] is the latest). Input events are
+    // mapped according to the frame actually displayed, which may still be
+    // the previous one just after a rotation.
+    struct sc_capture_mapping mappings[2]; // protected by mutex
 };
 
 struct sc_capture_params {
@@ -78,8 +89,11 @@ sc_capture_destroy(struct sc_capture *capture);
 /**
  * Position mapper for sc_controller_set_position_mapper() (userdata is the
  * struct sc_capture)
+ *
+ * Return false if the display size is not known yet (the event must then be
+ * dropped: the server would inject it at raw, wrong coordinates).
  */
-void
+bool
 sc_capture_map_position(struct sc_position *position, void *userdata);
 
 #endif

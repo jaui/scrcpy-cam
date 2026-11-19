@@ -50,6 +50,17 @@ ssize_t
 sc_adb_shell_read(struct sc_intr *intr, const char *serial, const char *cmd,
                   char *buf, size_t len, unsigned flags);
 
+/**
+ * Start "adb -s <serial> shell <cmd>" and return its process, with its stdout
+ * in pout (for long-running commands, read with sc_pipe_read_intr()).
+ *
+ * The caller must close pout and wait for (or terminate) the process.
+ * Return SC_PROCESS_NONE on error.
+ */
+sc_pid
+sc_adb_shell_stream(const char *serial, const char *cmd, unsigned flags,
+                    sc_pipe *pout);
+
 bool
 sc_adb_start_server(struct sc_intr *intr, unsigned flags);
 

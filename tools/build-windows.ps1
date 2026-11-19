@@ -21,7 +21,9 @@ param(
     [switch]$NoCache
 )
 
-$ErrorActionPreference = 'Stop'
+# Nicht 'Stop': unter Windows PowerShell 5.1 wuerde umgeleitete stderr-Ausgabe von docker
+# sonst zum abbrechenden Fehler. Fehler werden ueber $LASTEXITCODE geprueft.
+$ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent $PSScriptRoot
 $image = 'scrcpy-cam-build'
 $volume = 'scrcpy-cam-deps'
@@ -45,7 +47,7 @@ function Wait-Docker {
 Wait-Docker
 
 if ($NoCache) {
-    docker volume rm $volume 2>$null | Out-Null
+    docker volume rm $volume 2>&1 | Out-Null   # darf fehlschlagen (Volume fehlt)
 }
 
 Write-Host "Baue Image $image ..."

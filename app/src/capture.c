@@ -4,27 +4,54 @@
 #include <ctype.h>
 #include <string.h>
 #include <libavcodec/avcodec.h>
+#include <libavutil/buffer.h>
 #include <libavutil/frame.h>
 #include <libavutil/pixfmt.h>
 #include <SDL3/SDL_camera.h>
 #include <SDL3/SDL_surface.h>
 
 #include "adb/adb.h"
+#include "events.h"
 #include "util/log.h"
+#include "util/process_intr.h"
 #include "util/tick.h"
 
 // Logical size and rotation of every display, one line per display:
 //   "<display_id> <width> <height> <rotation>"
+//
+// "cmd display get-displays" is about 3x cheaper on the device than
+// "dumpsys display" (which dumps ~400 KB of text on recent devices); fall back
+// to dumpsys if it is not available.
 #define SC_CAPTURE_DISPLAY_CMD \
-    "dumpsys display | grep mOverrideDisplayInfo | sed -E " \
+    "{ cmd display get-displays 2>/dev/null | grep 'DisplayInfo{' " \
+    "|| dumpsys display | grep mOverrideDisplayInfo; } | sed -E " \
     "'s/.*displayId ([0-9]+).* real ([0-9]+) x ([0-9]+).* rotation " \
     "([0-9]).*/\\1 \\2 \\3 \\4/'"
 
-#define SC_CAPTURE_MONITOR_INTERVAL SC_TICK_FROM_MS(1000)
+// The same command in a loop, in a single long-lived "adb shell" process
+// (instead of starting a new adb process every second). Each result block is
+// terminated by a line containing a single ".".
+//
+// The loop runs only while a scrcpy server is alive: if the client is killed
+// (crash, task manager), the server exits (its sockets are closed), so the
+// loop and the orphan adb process also end instead of polling forever.
+// (The "[.]" prevents pgrep from matching the command line of this shell.)
+#define SC_CAPTURE_DISPLAY_LOOP_CMD \
+    "while ! command -v pgrep >/dev/null " \
+    "|| pgrep -f 'com[.]genymobile[.]scrcpy[.]Server' >/dev/null; do " \
+    SC_CAPTURE_DISPLAY_CMD "; echo .; sleep 1; done"
+
 #define SC_CAPTURE_RETRY_INTERVAL SC_TICK_FROM_MS(1000)
 #define SC_CAPTURE_POLL_INTERVAL SC_TICK_FROM_MS(2)
 #define SC_CAPTURE_STALL_TIMEOUT SC_TICK_FROM_MS(3000)
 #define SC_CAPTURE_PERMISSION_TIMEOUT SC_TICK_FROM_MS(10000)
+
+#define SC_CAPTURE_ALIGN(x) (((x) + 31) & ~31u)
+
+static inline bool
+sc_size_equals(struct sc_size a, struct sc_size b) {
+    return a.width == b.width && a.height == b.height;
+}
 
 static bool
 contains_ignore_case(const char *haystack, const char *needle) {
@@ -73,19 +100,12 @@ sc_capture_is_stopped(struct sc_capture *capture) {
 
 /* --- device display monitor (adb) --------------------------------------- */
 
+// Parse the output of SC_CAPTURE_DISPLAY_CMD and store the display size
 static bool
-sc_capture_poll_display(struct sc_capture *capture) {
-    char buf[2048];
-    ssize_t r = sc_adb_shell_read(&capture->intr, capture->serial,
-                                  SC_CAPTURE_DISPLAY_CMD, buf, sizeof(buf),
-                                  SC_ADB_NO_STDERR | SC_ADB_NO_LOGERR);
-    if (r < 0) {
-        return false;
-    }
-
+sc_capture_apply_display(struct sc_capture *capture, const char *output) {
     struct sc_size size;
     unsigned rotation;
-    bool found = sc_capture_geometry_parse_display(buf, capture->display_id,
+    bool found = sc_capture_geometry_parse_display(output, capture->display_id,
                                                    &size, &rotation);
     if (!found) {
         return false;
@@ -108,22 +128,103 @@ sc_capture_poll_display(struct sc_capture *capture) {
     return true;
 }
 
+// One-shot poll (used once at start)
+static bool
+sc_capture_poll_display(struct sc_capture *capture) {
+    char buf[2048];
+    ssize_t r = sc_adb_shell_read(&capture->intr, capture->serial,
+                                  SC_CAPTURE_DISPLAY_CMD, buf, sizeof(buf),
+                                  SC_ADB_NO_STDERR | SC_ADB_NO_LOGERR);
+    if (r < 0) {
+        return false;
+    }
+
+    return sc_capture_apply_display(capture, buf);
+}
+
+static void
+sc_capture_report_display(struct sc_capture *capture, bool ok, bool *warned) {
+    if (ok) {
+        *warned = false;
+    } else if (!*warned) {
+        LOGW("Capture card: could not read the size of display %" PRIu32
+             " (retrying)", capture->display_id);
+        *warned = true;
+    }
+}
+
+// Read the output of SC_CAPTURE_DISPLAY_LOOP_CMD until the process ends (device
+// disconnected) or is interrupted
+static void
+sc_capture_read_display_stream(struct sc_capture *capture, sc_pid pid,
+                               sc_pipe pout, bool *warned) {
+    char buf[4096];
+    size_t len = 0;
+
+    for (;;) {
+        ssize_t r = sc_pipe_read_intr(&capture->intr, pid, pout, buf + len,
+                                      sizeof(buf) - 1 - len);
+        if (r <= 0) {
+            return;
+        }
+        len += r;
+        buf[len] = '\0';
+
+        // Handle every complete block (terminated by a "." line)
+        size_t block_start = 0;
+        size_t line_start = 0;
+        for (size_t i = 0; i < len; ++i) {
+            if (buf[i] != '\n') {
+                continue;
+            }
+            size_t line_len = i - line_start;
+            if (line_len && buf[i - 1] == '\r') {
+                --line_len;
+            }
+            if (line_len == 1 && buf[line_start] == '.') {
+                buf[line_start] = '\0';
+                bool ok = sc_capture_apply_display(capture, buf + block_start);
+                sc_capture_report_display(capture, ok, warned);
+                block_start = i + 1;
+            }
+            line_start = i + 1;
+        }
+
+        // Keep the incomplete block for the next read
+        len -= block_start;
+        memmove(buf, buf + block_start, len);
+        if (len == sizeof(buf) - 1) {
+            // Unexpected output without terminator, drop it
+            len = 0;
+        }
+    }
+}
+
 static int
 run_monitor(void *data) {
     struct sc_capture *capture = data;
 
     bool warned = false;
-    for (;;) {
-        bool ok = sc_capture_poll_display(capture);
-        if (!ok && !warned && !sc_capture_is_stopped(capture)) {
-            LOGW("Capture card: could not read the size of display %" PRIu32
-                 " (retrying)", capture->display_id);
-            warned = true;
-        } else if (ok) {
-            warned = false;
+    while (!sc_capture_is_stopped(capture)) {
+        sc_pipe pout;
+        sc_pid pid = sc_adb_shell_stream(capture->serial,
+                                         SC_CAPTURE_DISPLAY_LOOP_CMD,
+                                         SC_ADB_NO_STDERR, &pout);
+        if (pid != SC_PROCESS_NONE) {
+            sc_capture_read_display_stream(capture, pid, pout, &warned);
+            sc_pipe_close(pout);
+            // No-op if the process already exited
+            sc_process_terminate(pid);
+            sc_process_wait(pid, true);
         }
 
-        sc_tick deadline = sc_tick_now() + SC_CAPTURE_MONITOR_INTERVAL;
+        if (sc_capture_is_stopped(capture)) {
+            break;
+        }
+
+        // The adb shell ended (device disconnected?): restart it
+        sc_capture_report_display(capture, false, &warned);
+        sc_tick deadline = sc_tick_now() + SC_CAPTURE_RETRY_INTERVAL;
         if (!sc_capture_wait(capture, deadline)) {
             break;
         }
@@ -268,28 +369,93 @@ sc_capture_set_color(AVFrame *frame, SDL_Colorspace cs) {
                        ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
 }
 
+// Compute the crop area, and the display size it is based on
 static struct sc_capture_rect
-sc_capture_get_crop(struct sc_capture *capture, struct sc_size frame_size) {
-    struct sc_capture_rect rect;
+sc_capture_get_crop(struct sc_capture *capture, struct sc_size frame_size,
+                    struct sc_size *out_display) {
+    sc_mutex_lock(&capture->mutex);
+    struct sc_size display = capture->display_size;
+    sc_mutex_unlock(&capture->mutex);
+
+    *out_display = display;
+
     if (capture->has_fixed_crop) {
-        rect = capture->fixed_crop;
+        struct sc_capture_rect rect = capture->fixed_crop;
         if (!sc_capture_geometry_clamp(&rect, frame_size)) {
             rect = sc_capture_geometry_fit(frame_size, (struct sc_size) {0, 0});
         }
         return rect;
     }
 
-    sc_mutex_lock(&capture->mutex);
-    struct sc_size display = capture->display_size;
-    sc_mutex_unlock(&capture->mutex);
-
     return sc_capture_geometry_fit(frame_size, display);
 }
 
-// Copy the crop area of a NV12/NV21/IYUV/YV12 surface into a new YUV420P frame
-static AVFrame *
-sc_capture_convert(struct sc_capture *capture, SDL_Surface *surface,
-                   SDL_Colorspace colorspace) {
+// Record which display size the frames of a given content size correspond to,
+// before pushing them
+static void
+sc_capture_set_mapping(struct sc_capture *capture, struct sc_size content,
+                       struct sc_size display) {
+    sc_mutex_lock(&capture->mutex);
+    struct sc_capture_mapping *m = capture->mappings;
+    if (!sc_size_equals(m[0].content, content)
+            || !sc_size_equals(m[0].display, display)) {
+        m[1] = m[0];
+        m[0].content = content;
+        m[0].display = display;
+    }
+    sc_mutex_unlock(&capture->mutex);
+}
+
+// Pool of YUV420P frame buffers, to avoid an allocation per frame
+struct sc_capture_pool {
+    AVBufferPool *pool;
+    struct sc_size size;
+};
+
+static bool
+sc_capture_frame_get_buffer(struct sc_capture_pool *p, AVFrame *frame,
+                            struct sc_size size) {
+    int linesize_y = SC_CAPTURE_ALIGN(size.width);
+    int linesize_c = SC_CAPTURE_ALIGN(size.width / 2);
+    size_t y_size = (size_t) linesize_y * size.height;
+    size_t c_size = (size_t) linesize_c * (size.height / 2);
+
+    if (!p->pool || !sc_size_equals(p->size, size)) {
+        // Buffers still referenced by other components remain valid
+        av_buffer_pool_uninit(&p->pool);
+        // + padding, like av_frame_get_buffer()
+        p->pool = av_buffer_pool_init(y_size + 2 * c_size + 64, NULL);
+        if (!p->pool) {
+            LOG_OOM();
+            return false;
+        }
+        p->size = size;
+    }
+
+    AVBufferRef *buf = av_buffer_pool_get(p->pool);
+    if (!buf) {
+        LOG_OOM();
+        return false;
+    }
+
+    frame->format = AV_PIX_FMT_YUV420P;
+    frame->width = size.width;
+    frame->height = size.height;
+    frame->buf[0] = buf;
+    frame->data[0] = buf->data;
+    frame->data[1] = buf->data + y_size;
+    frame->data[2] = buf->data + y_size + c_size;
+    frame->linesize[0] = linesize_y;
+    frame->linesize[1] = linesize_c;
+    frame->linesize[2] = linesize_c;
+    return true;
+}
+
+// Copy the crop area of a NV12/NV21/IYUV/YV12 surface into frame (YUV420P)
+static bool
+sc_capture_convert(struct sc_capture *capture, struct sc_capture_pool *pool,
+                   SDL_Surface *surface, SDL_Colorspace colorspace,
+                   AVFrame *frame) {
     SDL_PixelFormat fmt = surface->format;
     bool semi_planar = fmt == SDL_PIXELFORMAT_NV12
                     || fmt == SDL_PIXELFORMAT_NV21;
@@ -301,33 +467,25 @@ sc_capture_convert(struct sc_capture *capture, SDL_Surface *surface,
                  SDL_GetPixelFormatName(fmt));
             logged = true;
         }
-        return NULL;
+        return false;
     }
 
     if (surface->w < 2 || surface->h < 2 || surface->w > 0xFFFF
             || surface->h > 0xFFFF) {
-        return NULL;
+        return false;
     }
 
     struct sc_size frame_size = {surface->w, surface->h};
-    struct sc_capture_rect crop = sc_capture_get_crop(capture, frame_size);
+    struct sc_size display;
+    struct sc_capture_rect crop =
+        sc_capture_get_crop(capture, frame_size, &display);
     assert(crop.width && crop.height);
     assert(!(crop.x & 1) && !(crop.y & 1));
     assert(!(crop.width & 1) && !(crop.height & 1));
 
-    AVFrame *frame = av_frame_alloc();
-    if (!frame) {
-        LOG_OOM();
-        return NULL;
-    }
-
-    frame->format = AV_PIX_FMT_YUV420P;
-    frame->width = crop.width;
-    frame->height = crop.height;
-    if (av_frame_get_buffer(frame, 0) < 0) {
-        LOG_OOM();
-        av_frame_free(&frame);
-        return NULL;
+    struct sc_size content = {crop.width, crop.height};
+    if (!sc_capture_frame_get_buffer(pool, frame, content)) {
+        return false;
     }
 
     // Layout of SDL YUV surfaces (see SDL_CalculateYUVSize()): the Y plane
@@ -380,7 +538,19 @@ sc_capture_convert(struct sc_capture *capture, SDL_Surface *surface,
     }
 
     sc_capture_set_color(frame, colorspace);
-    return frame;
+    sc_capture_set_mapping(capture, content, display);
+    return true;
+}
+
+static sc_tick
+sc_capture_get_frame_period(SDL_Camera *camera, uint16_t req_fps) {
+    SDL_CameraSpec spec;
+    if (SDL_GetCameraFormat(camera, &spec) && spec.framerate_numerator > 0
+            && spec.framerate_denominator > 0) {
+        return SC_TICK_FROM_SEC(1) * spec.framerate_denominator
+                                   / spec.framerate_numerator;
+    }
+    return SC_TICK_FROM_SEC(1) / (req_fps ? req_fps : 60);
 }
 
 static int
@@ -389,11 +559,21 @@ run_capture(void *data) {
 
     AVCodecContext *ctx = NULL;
     bool sinks_open = false;
+    bool error = false;
     struct sc_size last_size = {0, 0};
     SDL_Camera *camera = NULL;
     SDL_Colorspace colorspace = SDL_COLORSPACE_UNKNOWN;
     sc_tick last_frame = 0;
+    sc_tick frame_period = 0;
     bool log_open_errors = true;
+    struct sc_capture_pool pool = {NULL, {0, 0}};
+
+    AVFrame *frame = av_frame_alloc();
+    if (!frame) {
+        LOG_OOM();
+        error = true;
+        goto end;
+    }
 
     while (!sc_capture_is_stopped(capture)) {
         if (!camera) {
@@ -409,6 +589,8 @@ run_capture(void *data) {
             }
             log_open_errors = true;
             last_frame = sc_tick_now();
+            frame_period =
+                sc_capture_get_frame_period(camera, capture->req_fps);
 
             SDL_CameraSpec spec;
             colorspace = SDL_GetCameraFormat(camera, &spec)
@@ -418,23 +600,26 @@ run_capture(void *data) {
         Uint64 timestamp;
         SDL_Surface *surface = SDL_AcquireCameraFrame(camera, &timestamp);
         if (!surface) {
-            if (sc_tick_now() - last_frame > SC_CAPTURE_STALL_TIMEOUT) {
+            sc_tick now = sc_tick_now();
+            if (now - last_frame > SC_CAPTURE_STALL_TIMEOUT) {
                 LOGW("Capture card: no frame received, reopening");
                 SDL_CloseCamera(camera);
                 camera = NULL;
                 continue;
             }
-            sc_tick deadline = sc_tick_now() + SC_CAPTURE_POLL_INTERVAL;
-            if (!sc_capture_wait(capture, deadline)) {
+            // No frame yet: poll again shortly
+            if (!sc_capture_wait(capture, now + SC_CAPTURE_POLL_INTERVAL)) {
                 break;
             }
             continue;
         }
 
         last_frame = sc_tick_now();
-        AVFrame *frame = sc_capture_convert(capture, surface, colorspace);
+        bool converted = sc_capture_convert(capture, &pool, surface,
+                                            colorspace, frame);
         SDL_ReleaseCameraFrame(camera, surface);
-        if (!frame) {
+        if (!converted) {
+            av_frame_unref(frame);
             continue;
         }
 
@@ -443,7 +628,7 @@ run_capture(void *data) {
             ctx = avcodec_alloc_context3(NULL);
             if (!ctx) {
                 LOG_OOM();
-                av_frame_free(&frame);
+                error = true;
                 break;
             }
             ctx->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -460,13 +645,13 @@ run_capture(void *data) {
             };
             if (!sc_frame_source_sinks_open(&capture->frame_source, ctx,
                                             &session)) {
-                av_frame_free(&frame);
+                LOGE("Capture card: could not open the frame sinks");
+                error = true;
                 break;
             }
             sinks_open = true;
             last_size = size;
-        } else if (size.width != last_size.width
-                || size.height != last_size.height) {
+        } else if (!sc_size_equals(size, last_size)) {
             LOGI("Capture card: content size %" PRIu16 "x%" PRIu16,
                  size.width, size.height);
             struct sc_stream_session session = {
@@ -480,7 +665,10 @@ run_capture(void *data) {
                 sc_frame_source_sinks_push_session(&capture->frame_source,
                                                    &session);
             if (res != SC_SINK_OK) {
-                av_frame_free(&frame);
+                if (res == SC_SINK_KO) {
+                    LOGE("Capture card: could not push session");
+                    error = true;
+                }
                 break;
             }
             last_size = size;
@@ -488,12 +676,24 @@ run_capture(void *data) {
 
         enum sc_sink_result res =
             sc_frame_source_sinks_push(&capture->frame_source, frame);
-        av_frame_free(&frame);
+        av_frame_unref(frame);
         if (res != SC_SINK_OK) {
+            if (res == SC_SINK_KO) {
+                LOGE("Capture card: could not push frame");
+                error = true;
+            }
+            break;
+        }
+
+        // The next frame is not expected before about one frame period:
+        // sleep instead of polling every few milliseconds
+        sc_tick deadline = last_frame + frame_period * 3 / 4;
+        if (deadline > sc_tick_now() && !sc_capture_wait(capture, deadline)) {
             break;
         }
     }
 
+end:
     if (camera) {
         SDL_CloseCamera(camera);
     }
@@ -502,6 +702,14 @@ run_capture(void *data) {
         sc_frame_source_sinks_close(&capture->frame_source);
     }
     avcodec_free_context(&ctx);
+    av_frame_free(&frame);
+    av_buffer_pool_uninit(&pool.pool);
+
+    if (error && !sc_capture_is_stopped(capture)) {
+        // Do not silently freeze the last frame: terminate scrcpy (the
+        // launcher restarts it)
+        sc_push_event(SC_EVENT_CAPTURE_ERROR);
+    }
 
     LOGD("Capture card thread ended");
     return 0;
@@ -551,6 +759,7 @@ sc_capture_init(struct sc_capture *capture,
     capture->display_size.width = 0;
     capture->display_size.height = 0;
     capture->rotation = 0;
+    memset(capture->mappings, 0, sizeof(capture->mappings));
 
     return true;
 }
@@ -561,8 +770,7 @@ sc_capture_start(struct sc_capture *capture) {
     // already cropped correctly
     if (!sc_capture_poll_display(capture)) {
         LOGW("Capture card: could not read the size of display %" PRIu32
-             ", the whole capture frame is used until it is known",
-             capture->display_id);
+             ", input is ignored until it is known", capture->display_id);
     }
 
     bool ok = sc_thread_create(&capture->monitor_thread, run_monitor,
@@ -593,7 +801,7 @@ sc_capture_stop(struct sc_capture *capture) {
     sc_cond_broadcast(&capture->cond);
     sc_mutex_unlock(&capture->mutex);
 
-    // Interrupt a pending adb command
+    // Interrupt a pending adb command (terminates the adb process)
     sc_intr_interrupt(&capture->intr);
 }
 
@@ -612,20 +820,30 @@ sc_capture_destroy(struct sc_capture *capture) {
     sc_mutex_destroy(&capture->mutex);
 }
 
-void
+bool
 sc_capture_map_position(struct sc_position *position, void *userdata) {
     struct sc_capture *capture = userdata;
 
     sc_mutex_lock(&capture->mutex);
-    struct sc_size display = capture->display_size;
+    struct sc_capture_mapping m = capture->mappings[0];
+    struct sc_capture_mapping prev = capture->mappings[1];
     sc_mutex_unlock(&capture->mutex);
 
-    if (!display.width || !display.height) {
-        // Unknown display size: assume the frame matches the display
-        return;
+    // The window may still display a frame of the previous mapping (e.g. just
+    // after a rotation): use the mapping matching the displayed frame size
+    if (!sc_size_equals(position->screen_size, m.content)
+            && sc_size_equals(position->screen_size, prev.content)) {
+        m = prev;
+    }
+
+    if (!m.display.width || !m.display.height) {
+        // Unknown display size: the server would inject the raw window
+        // coordinates at a wrong location
+        return false;
     }
 
     position->point = sc_capture_geometry_map(position->point,
-                                              position->screen_size, display);
-    position->screen_size = display;
+                                              position->screen_size, m.display);
+    position->screen_size = m.display;
+    return true;
 }

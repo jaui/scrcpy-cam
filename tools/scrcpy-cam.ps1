@@ -5,9 +5,11 @@
 .DESCRIPTION
     - findet das gekoppelte Handy ueber adb/mDNS (der Wireless-Debugging-Port darf sich aendern)
     - startet scrcpy mit --capture-card
-    - beendet sich scrcpy wegen Verbindungsverlust oder Startfehler, wird neu verbunden und
-      neu gestartet (alle 2 s)
+    - beendet sich scrcpy wegen Verbindungsverlust oder Fehler, wird neu verbunden und
+      neu gestartet (alle 2 s); scheitert der Start mehrmals hintereinander sofort (z. B.
+      falsche Argumente), werden die Abstaende bis auf 60 s verlaengert
     - wird das Fenster geschlossen (scrcpy endet normal), endet auch der Launcher
+    - laeuft mit Windows PowerShell 5.1 und PowerShell 7
 
 .PARAMETER ScrcpyDir
     Ordner mit scrcpy.exe, adb.exe und scrcpy-server.
@@ -26,10 +28,13 @@ param(
     [string]$ScrcpyDir = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'dist\scrcpy-cam-win64'),
     [string]$Serial = '',
     [string[]]$ScrcpyArgs = @(),
-    [int]$RetrySeconds = 2
+    [int]$RetrySeconds = 2,
+    [int]$MaxRetrySeconds = 60
 )
 
-$ErrorActionPreference = 'Stop'
+# Nicht 'Stop': unter Windows PowerShell 5.1 wird jede umgeleitete stderr-Zeile von adb
+# (z. B. "* daemon not running; starting now") sonst zum abbrechenden Fehler.
+$ErrorActionPreference = 'Continue'
 $adb = Join-Path $ScrcpyDir 'adb.exe'
 $scrcpy = Join-Path $ScrcpyDir 'scrcpy.exe'
 foreach ($f in $adb, $scrcpy) {
@@ -72,6 +77,7 @@ function Connect-Device {
 
 & $adb start-server 2>&1 | Out-Null
 $waitingLogged = $false
+$quickFails = 0          # Starts hintereinander, die nach weniger als 15 s mit Fehler endeten
 
 while ($true) {
     $device = Connect-Device
@@ -87,16 +93,31 @@ while ($true) {
 
     Write-Log "Starte scrcpy fuer $device"
     $scrcpyArgList = @("--serial=$device", '--capture-card') + $ScrcpyArgs
-    $proc = Start-Process -FilePath $scrcpy -ArgumentList $scrcpyArgList -WorkingDirectory $ScrcpyDir `
-                          -NoNewWindow -PassThru
-    $proc.WaitForExit()
-    $code = $proc.ExitCode
+    # Direkter Aufruf statt Start-Process -ArgumentList: PowerShell setzt Argumente mit
+    # Leerzeichen (z. B. --capture-card="USB Video") korrekt in Anfuehrungszeichen.
+    $started = Get-Date
+    Push-Location $ScrcpyDir
+    try {
+        & $scrcpy @scrcpyArgList
+        $code = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    $ranSeconds = ((Get-Date) - $started).TotalSeconds
 
     if ($code -eq 0) {
         Write-Log 'scrcpy wurde beendet (Fenster geschlossen) - Launcher endet.'
         break
     }
 
-    Write-Log "scrcpy beendet mit Code $code (1 = Fehler, 2 = Verbindung verloren) - verbinde neu ..."
-    Start-Sleep -Seconds $RetrySeconds
+    if ($ranSeconds -lt 15) { $quickFails++ } else { $quickFails = 0 }
+    $delay = $RetrySeconds
+    if ($quickFails -ge 3) {
+        $delay = [math]::Min($MaxRetrySeconds, $RetrySeconds * [math]::Pow(2, $quickFails - 2))
+        if ($quickFails -eq 3) {
+            Write-Log 'scrcpy startet wiederholt nicht - Argumente und Capture-Karte pruefen (Ausgabe oben).'
+        }
+    }
+    Write-Log ("scrcpy beendet mit Code {0} (1 = Fehler, 2 = Verbindung verloren) - neuer Versuch in {1} s ..." -f $code, $delay)
+    Start-Sleep -Seconds $delay
 }

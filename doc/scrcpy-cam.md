@@ -147,14 +147,18 @@ Text wird normal getippt.
 
 ```powershell
 .\tools\scrcpy-cam.ps1 [-ScrcpyDir <Ordner>] [-Serial <Teil der Seriennummer>] `
-                       [-ScrcpyArgs '--fullscreen','--no-audio'] [-RetrySeconds 2]
+                       [-ScrcpyArgs '--fullscreen','--no-audio'] [-RetrySeconds 2] [-MaxRetrySeconds 60]
 ```
 
+- Läuft mit Windows PowerShell 5.1 (`powershell.exe`) und PowerShell 7 (`pwsh`).
 - Sucht das gekoppelte Handy über `adb devices` und `adb mdns services`
   (der Port von Wireless Debugging darf sich ändern).
-- Startet scrcpy mit `--serial=<Gerät> --capture-card` und den zusätzlichen Argumenten.
-- Endet scrcpy mit Code 1 (Startfehler) oder 2 (Verbindung verloren), wird nach
-  `RetrySeconds` neu verbunden und neu gestartet.
+- Startet scrcpy mit `--serial=<Gerät> --capture-card` und den zusätzlichen Argumenten
+  (Argumente mit Leerzeichen, z. B. `'--capture-card=USB Video'`, werden korrekt übergeben).
+- Endet scrcpy mit einem Fehler (Code 1, z. B. Fehler der Capture-Karte) oder wegen
+  Verbindungsverlust (Code 2), wird nach `RetrySeconds` neu verbunden und neu gestartet.
+- Scheitert der Start dreimal hintereinander nach weniger als 15 s (z. B. falsches Argument),
+  verdoppelt sich der Abstand bis `MaxRetrySeconds` (2, 4, 8 … 60 s) statt endlos alle 2 s.
 - Endet scrcpy normal (Code 0, Fenster geschlossen), endet auch der Launcher.
 - Standard für `-ScrcpyDir`: `..\..\dist\scrcpy-cam-win64` relativ zum Skript, also
   `C:\dev\scrcpy-cam\dist\scrcpy-cam-win64`.
@@ -259,6 +263,9 @@ git push --force-with-lease origin main
    enthält, mit `SDL_OpenCamera` im Format **NV12**, 1920×1080, 60 fps.
 2. Pro Frame (`SDL_AcquireCameraFrame`): Ausschnitt bestimmen (siehe unten), Y-Zeilen kopieren,
    UV-Werte aus NV12 in getrennte U/V-Ebenen schreiben → `AVFrame` im Format `YUV420P`.
+   Die Puffer kommen aus einem `AVBufferPool` (keine Speicherreservierung pro Frame). Nach
+   einem Frame schläft der Thread ¾ der Frame-Dauer, erst dann wird alle 2 ms nach dem
+   nächsten Frame gefragt (statt durchgehend alle 2 ms).
 3. Farbraum: von SDL gemeldet, sonst BT.709 mit begrenztem Bereich (üblich bei HDMI-Capture).
 4. Beim ersten Frame werden die Sinks mit einem leeren `AVCodecContext` (Größe, Pixelformat)
    geöffnet – das öffnet das Fenster. Größenwechsel (Drehung) laufen über
@@ -267,6 +274,9 @@ git push --force-with-lease origin main
    (`interop_software`) um.
 6. Kommen 3 s lang keine Frames (Karte abgezogen), wird die Kamera geschlossen und jede Sekunde
    neu geöffnet. Das Fenster bleibt offen. *Noch nicht mit echtem Abziehen getestet.*
+7. Schlägt das Weitergeben eines Frames fehl, meldet der Thread `SC_EVENT_CAPTURE_ERROR`:
+   scrcpy endet mit Code 1 (der Launcher startet neu), statt mit eingefrorenem Bild
+   weiterzulaufen.
 
 ### Ausschnitt (schwarze Ränder)
 
@@ -286,16 +296,28 @@ Mit `--capture-card-crop` wird stattdessen ein fester Ausschnitt verwendet.
 
 ### Displaygröße und Drehung
 
-Thread `scrcpy-capmon` fragt einmal pro Sekunde (erstes Mal synchron beim Start) ab:
+Abfrage (einmal synchron beim Start, damit schon die ersten Frames richtig zugeschnitten sind):
 
 ```sh
-dumpsys display | grep mOverrideDisplayInfo | sed -E \
+{ cmd display get-displays 2>/dev/null | grep 'DisplayInfo{' \
+  || dumpsys display | grep mOverrideDisplayInfo; } | sed -E \
   's/.*displayId ([0-9]+).* real ([0-9]+) x ([0-9]+).* rotation ([0-9]).*/\1 \2 \3 \4/'
 ```
 
 Ausgabe: eine Zeile pro Display, z. B. `0 1080 2400 0`. Die „real“-Größe ist die logische Größe
-und berücksichtigt die Drehung bereits. Dauer über WLAN: rund 300 ms. Die Orientierung wird
-bewusst **nicht** aus dem Bild geraten (dunkle Apps im Querformat würden falsch erkannt).
+und berücksichtigt die Drehung bereits. Die Orientierung wird bewusst **nicht** aus dem Bild
+geraten (dunkle Apps im Querformat würden falsch erkannt).
+
+Danach läuft dieselbe Abfrage im Thread `scrcpy-capmon` als Schleife in **einer** dauerhaften
+`adb shell` (jede Sekunde, Blöcke durch eine Zeile `.` getrennt). Die Schleife läuft nur,
+solange ein scrcpy-Server lebt (`pgrep -f 'com[.]genymobile[.]scrcpy[.]Server'`): Wird scrcpy
+hart beendet (Absturz, Task-Manager), endet der Server, und mit ihm nach spätestens 1–2 s die
+Schleife und der verwaiste `adb.exe`-Prozess. Endet die Shell (Verbindung weg), wird sie nach
+1 s neu gestartet.
+
+Kosten, gemessen auf Testgerät B: `cmd display get-displays` ≈ 13 ms und 6 KB Ausgabe pro
+Aufruf, `dumpsys display` ≈ 36 ms und ≈ 400 KB (nur noch Rückfall für ältere Android-Versionen).
+Auf dem PC entsteht kein neuer `adb.exe`-Prozess pro Sekunde mehr.
 
 ### Koordinaten
 
@@ -303,8 +325,15 @@ Ohne Videostream kennt der Server keine Bildgröße und verwendet die Koordinate
 `display_id` (`server/.../control/Controller.java`, `getEventPointAndDisplayId`). Deshalb rechnet
 der Client um: `sc_controller_push_msg` ruft für Touch- und Scroll-Nachrichten
 `sc_capture_map_position` auf. Der skaliert den Punkt vom Ausschnitt (Fensterinhalt) auf die
-aktuelle Displaygröße (Pixelmitten, auf das Display begrenzt) und setzt `screen_size` auf die
-Displaygröße. Ist die Displaygröße unbekannt, bleibt die Position unverändert.
+Displaygröße (Pixelmitten, auf das Display begrenzt) und setzt `screen_size` auf die
+Displaygröße.
+
+- Verwendet wird die Displaygröße, **mit der der angezeigte Frame zugeschnitten wurde**. Die
+  Bildquelle merkt sich die letzten zwei Zuordnungen „Frame-Größe → Displaygröße“; direkt nach
+  einer Drehung, solange das Fenster noch den alten Frame zeigt, passt so die alte Zuordnung.
+- Ist die Displaygröße unbekannt (adb-Abfrage noch nicht erfolgreich), werden Touch- und
+  Scroll-Ereignisse **verworfen**. Der Server würde sie sonst mit den rohen Fensterkoordinaten
+  an falscher Stelle einspeisen.
 
 Maus-Linksklicks mit Pointer-ID „Maus“ spritzt der Server als **Finger** ein
 (`Controller.java`, Quelle `TOUCHSCREEN`), Hover und Rechts-/Mittelklick als Maus.
@@ -312,7 +341,11 @@ Maus-Linksklicks mit Pointer-ID „Maus“ spritzt der Server als **Finger** ein
 ### Threads und Beenden
 
 - `scrcpy-capture`: Kamera, Frames.
-- `scrcpy-capmon`: adb-Abfrage; laufende adb-Prozesse werden beim Beenden per `sc_intr` abgebrochen.
+- `scrcpy-capmon`: dauerhafte adb-Shell für die Displaygröße; beim Beenden wird der adb-Prozess
+  per `sc_intr` beendet.
+- Aufwecken: Normalerweise weckt scrcpy ohne Video das Handy beim Start nicht. Mit
+  `--capture-card` schon (das HDMI-Bild braucht ein eingeschaltetes Display);
+  `--no-power-on` wird weiterhin beachtet.
 - Beenden: `sc_capture_stop` (beim Stoppen der Decoder) → `sc_capture_join` → `sc_capture_destroy`,
   vor dem Zerstören des Bildschirms.
 
