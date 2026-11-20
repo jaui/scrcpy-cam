@@ -80,8 +80,10 @@ Bebilderte Anleitung (HTML/PDF): [`doc/anleitung-wlan-debugging/`](../doc/anleit
 
 ## 7. Bekannte Grenze: Neustart
 
-Nach einem Neustart muss einmal die PIN eingegeben werden. Erst danach laufen MacroDroid und
-Wireless Debugging. Ohne Eingriff am Gerät geht das mit einer Bluetooth-Tastatur-Emulation per ESP32
-([`tools/bt-hid`](bt-hid)): Sie verbindet sich schon vor dem ersten Entsperren und kann die PIN
-eingeben. Dafür einmalig koppeln (siehe dort). Wireless Debugging danach von Hand oder per
-Automations-App (Abschnitt 5) einschalten.
+Nach einem Neustart muss einmal am Handy die PIN eingegeben werden. Erst danach laufen MacroDroid und
+Wireless Debugging.
+
+**Optional (Zusatzhardware):** Eine Bluetooth-Tastatur-Emulation per ESP32 ([`tools/bt-hid`](bt-hid))
+verbindet sich schon vor dem ersten Entsperren und kann die PIN vom PC aus eingeben. Dafür einmalig
+koppeln (siehe dort). Wireless Debugging danach von Hand oder per Automations-App (Abschnitt 5)
+einschalten. Für den normalen Betrieb ist das nicht nötig.

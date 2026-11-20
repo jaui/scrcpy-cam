@@ -1,4 +1,8 @@
-# bt-hid – Bluetooth-Tastatur als Rückfallebene
+# bt-hid – Bluetooth-Tastatur als Rückfallebene (optional)
+
+> **Optionales Zusatzmodul.** scrcpy-cam funktioniert ohne bt-hid; der Client und der Launcher
+> nutzen es nicht. Es braucht zusätzliche Hardware (ESP32) und ist nur für den Notfall gedacht,
+> wenn adb nicht verfügbar ist.
 
 Ein ESP32 meldet sich am Handy als **Bluetooth-LE-Tastatur** (mit Systemtasten wie Home, Zurück,
 Power) und wird vom PC über USB gesteuert. Das funktioniert auch dann, wenn adb nicht verfügbar

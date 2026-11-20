@@ -227,7 +227,7 @@ Kurzfassung:
 | Wireless Debugging geht nach Neustart/WLAN-Verlust aus | **Standard: bei Bedarf am Handy von Hand wieder einschalten.** Optional: MacroDroid/Tasker mit `WRITE_SECURE_SETTINGS` setzt `adb_wifi_enabled=1` (bei Start, WLAN-Verbindung, alle 5 min). *Ungetestet.* |
 | Kopplung verfällt nach 7 Tagen ohne Nutzung | Entwickleroptionen: „Zeitüberschreitung der ADB-Autorisierung deaktivieren“. |
 | Samsung blockiert ADB | „Automatische Sperre“ (Auto Blocker) aus. |
-| Neustart → Handy gesperrt bis PIN | Neustarts vermeiden (automatischen Neustart und Auto-Updates aus). Rückfallebene: Bluetooth-Tastatur per ESP32 ([`tools/bt-hid`](../tools/bt-hid)) gibt die PIN ein – sie verbindet sich schon vor dem ersten Entsperren. *Getestet auf Testgerät A.* Wireless Debugging muss danach noch eingeschaltet werden (von Hand oder per Automations-App). |
+| Neustart → Handy gesperrt bis PIN | **Standard:** Neustarts vermeiden (automatischen Neustart und Auto-Updates aus), nach einem Neustart PIN am Handy eingeben. **Optional** (Zusatzhardware): Bluetooth-Tastatur per ESP32 ([`tools/bt-hid`](../tools/bt-hid)) gibt die PIN vom PC aus ein – sie verbindet sich schon vor dem ersten Entsperren. *Getestet auf Testgerät A.* Wireless Debugging muss danach noch eingeschaltet werden (von Hand oder per Automations-App). |
 | Mesh-WLAN | Prüfen, ob die WLAN-Freigabe für Wireless Debugging pro Access Point erfragt wird (offen). |
 
 Alternativen zu WLAN wurden geprüft und verworfen: Ein USB-C-Anschluss kann nicht gleichzeitig
@@ -486,9 +486,9 @@ Bildschirmkoordinaten sind zuverlässiger.
 - Vollständiger Login mit Freigabe per Authenticator
 - Mesh/AP-Wechsel: wird die Freigabe „Wireless Debugging in diesem Netzwerk“ erneut erfragt?
 - Optional: MacroDroid-Makro nach Neustart/WLAN-Verlust
-- bt-hid auf Testgerät B (Kopplung, Entsperren, Neustart)
+- Optional: bt-hid auf Testgerät B (Kopplung, Entsperren, Neustart)
 
-### 19.11.2026 – Testgerät A, Bluetooth-Tastatur (`tools/bt-hid`, ESP32-C3 SuperMini)
+### 19.11.2026 – Testgerät A, optionale Bluetooth-Tastatur (`tools/bt-hid`, ESP32-C3 SuperMini)
 
 | Test | Ergebnis |
 |---|---|
@@ -508,8 +508,9 @@ Bildschirmkoordinaten sind zuverlässiger.
 
 - Bei Verbindungsverlust beendet sich scrcpy; der Launcher startet es neu, das Fenster ist dabei
   1–3 s weg. Neu verbinden im selben Prozess ist noch nicht umgesetzt.
-- Nach einem Neustart muss das Handy einmal entsperrt werden (PIN) – am Gerät oder per
-  Bluetooth-Tastatur ([`tools/bt-hid`](../tools/bt-hid)). Wireless Debugging ist danach aus.
+- Nach einem Neustart muss das Handy einmal am Gerät entsperrt werden (PIN); Wireless Debugging
+  ist danach aus. Optional mit Zusatzhardware: PIN per Bluetooth-Tastatur
+  ([`tools/bt-hid`](../tools/bt-hid)).
 - Die Abbildung setzt voraus, dass das Handy sein Display unverzerrt und zentriert ausgibt.
   Falls nicht: `--capture-card-crop`.
 - Im Spiegelmodus kein `--turn-screen-off` (siehe oben); das Handy-Display bleibt an.
@@ -538,8 +539,8 @@ Mehr Ausgaben: `--verbosity=debug`.
 2. Optional: Handy-Automatik (MacroDroid), die Wireless Debugging selbst wieder einschaltet.
 3. Zusätzliche Tastenkürzel für Gesten (Wischen links/rechts/hoch, langes Drücken).
 4. Neuverbinden im selben Prozess (Fenster bleibt sichtbar).
-5. Bluetooth-Tastatur ([`tools/bt-hid`](../tools/bt-hid)): Test auf Testgerät B, danach evtl.
-   Einbindung in den Launcher.
+5. Optional: Bluetooth-Tastatur ([`tools/bt-hid`](../tools/bt-hid)) auf Testgerät B testen. Eine
+   Einbindung in den Launcher wäre ebenfalls optional (nur aktiv, wenn ein ESP32 angeschlossen ist).
 
 ## Anhang: Python-Prototyp
 
