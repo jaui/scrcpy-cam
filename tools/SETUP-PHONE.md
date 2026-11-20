@@ -57,7 +57,13 @@ Wireless Debugging geht nach Neustart und bei WLAN-Verlust aus.
 (Entwickleroptionen → Debugging über WLAN). Neu koppeln ist nicht nötig, der PC verbindet sich selbst.
 Bebilderte Anleitung (HTML/PDF): [`doc/anleitung-wlan-debugging/`](../doc/anleitung-wlan-debugging/wlan-debugging.adoc).
 
-**Optional (ungetestet):** Eine Automations-App schaltet es selbst wieder ein.
+**Optional A – eigene App „WLAN-Debugging“** ([`tools/adbwifi-android`](adbwifi-android)):
+schaltet Wireless Debugging nach Neustart (nach dem Entsperren), WLAN-Verlust und
+Access-Point-Wechsel selbst wieder ein; dazu Schnelleinstellungs-Kachel und App-Icon.
+Klein (≈ 45 KB), ohne Drittanbieter. Einrichten am PC mit `tools\adbwifi-android\build.ps1 -Install`
+(installiert, erteilt das Recht, nimmt die App von der Akku-Optimierung aus).
+
+**Optional B – Automations-App** (ungetestet):
 
 1. **MacroDroid** (oder Tasker) aus dem Play Store installieren.
 2. Am PC einmalig das Recht geben (Paketname MacroDroid: `com.arlosoft.macrodroid`):
@@ -80,8 +86,9 @@ Bebilderte Anleitung (HTML/PDF): [`doc/anleitung-wlan-debugging/`](../doc/anleit
 
 ## 7. Bekannte Grenze: Neustart
 
-Nach einem Neustart muss einmal am Handy die PIN eingegeben werden. Erst danach laufen MacroDroid und
-Wireless Debugging.
+Nach einem Neustart muss einmal am Handy die PIN eingegeben werden. Erst danach laufen Apps; die
+optionale App „WLAN-Debugging“ bzw. MacroDroid (Abschnitt 5) schaltet Wireless Debugging dann
+wieder ein, sonst von Hand.
 
 **Optional (Zusatzhardware):** Eine Bluetooth-Tastatur-Emulation per ESP32 ([`tools/bt-hid`](bt-hid))
 verbindet sich schon vor dem ersten Entsperren und kann die PIN vom PC aus eingeben. Dafür einmalig

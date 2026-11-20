@@ -1,0 +1,15 @@
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.kotlin/
+local.properties
+*.iml
+.idea/
+
+# Release signing material: never in the repository
+keystore/
+keystore.properties
+*.jks
+*.keystore
+
+*.apk

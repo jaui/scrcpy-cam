@@ -23,6 +23,8 @@
 > Bedienung, Bauen, Interna, Entscheidungen, Testprotokoll, Fehlersuche).
 >
 > Bauen: `tools/build-windows.ps1` (Docker). Handy einrichten: [`tools/SETUP-PHONE.md`](tools/SETUP-PHONE.md).
+> Optional: App „WLAN-Debugging“ ([`tools/adbwifi-android`](tools/adbwifi-android), ≈ 45 KB), schaltet
+> Wireless Debugging nach Neustart, WLAN-Verlust oder AP-Wechsel selbst wieder ein (Kachel, Icon, Automatik).
 > Optional, mit Zusatzhardware: Bluetooth-Tastatur per ESP32 als Rückfallebene nach einem Neustart
 > des Handys (PIN eingeben ohne adb), [`tools/bt-hid`](tools/bt-hid). Für den normalen Betrieb nicht nötig.
 > Python-Prototyp: [`tools/python-prototype`](tools/python-prototype).

@@ -104,8 +104,9 @@ python bthid.py "KEY ENTER" "SLEEP 1" "TYPE -" "KEY ENTER"
 - **Wireless Debugging** bleibt nach einem Neustart aus. Der Weg dorthin nur per Tastatur
   (`GUI+N` → Zahnrad → Einstellungen) ist nicht zuverlässig: Der Tastaturfokus landete im Test
   mal auf dem Zahnrad, mal auf einer Kachel (ein ENTER dort schaltet z. B. WLAN aus).
-  Empfohlen: eine Automations-App, die beim Entsperren Wireless Debugging einschaltet
-  ([`SETUP-PHONE.md`](../SETUP-PHONE.md), Abschnitt 5).
+  Empfohlen: die optionale App „WLAN-Debugging“ ([`adbwifi-android`](../adbwifi-android)), die nach
+  dem Entsperren Wireless Debugging selbst einschaltet (oder MacroDroid, [`SETUP-PHONE.md`](../SETUP-PHONE.md)
+  Abschnitt 5).
 - Nur Tastatur, keine Maus/Touch. Tippen auf beliebige Stellen ist damit nicht möglich.
 - Ein Handy, das mit einer älteren Firmware-Version gekoppelt wurde, zeigt evtl. noch den Namen
   „nimble“ an. Neu koppeln behebt das.

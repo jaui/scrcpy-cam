@@ -1,0 +1,13 @@
+[versions]
+agp = "9.3.1"
+compileSdk = "37"
+# Wireless Debugging exists since Android 11 (API 30).
+minSdk = "30"
+targetSdk = "37"
+junit = "4.13.2"
+
+[libraries]
+junit = { module = "junit:junit", version.ref = "junit" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
