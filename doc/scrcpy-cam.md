@@ -483,6 +483,13 @@ Nicht getestet: vollständiger Login mit Freigabe per Authenticator (keine Zugan
 |---|---|
 | UGREEN-USB abziehen, ≈ 5 s warten, wieder einstecken (scrcpy läuft) | erster Build: Abziehen erkannt, Karte danach aber nie wieder gefunden (Bild bleibt schwarz) – SDL 3.4 enumeriert unter Windows (Media Foundation) Kameras nur beim Start des Kamera-Subsystems („no hotplug“). Mit Neu-Einlesen (Kamera-Subsystem im Hauptthread neu starten, höchstens alle 3 s, solange die Karte fehlt): **Bild kommt zurück** |
 
+### 20.11.2026 – Testgerät B, DeX
+
+| Test | Ergebnis |
+|---|---|
+| DeX an, scrcpy ohne `--display-id` | Bild zu klein/falsch: gesteuert wird Display 0 (Handy, Hochformat), der Zuschnitt schneidet aus dem DeX-Bild einen Hochformat-Streifen |
+| DeX an, `--display-id=9` (DeX-Display 1920×1080, ID aus `cmd display get-displays`) | ✅ Bild füllt das Fenster 1:1, Klicks treffen exakt |
+
 Hinweis zu Tests: Ein `SetForegroundWindow` aus einem Hintergrundprozess wird von Windows oft
 verweigert. Simulierte Tastendrücke landen dann im falschen Fenster. Mausklicks auf
 Bildschirmkoordinaten sind zuverlässiger.
@@ -490,7 +497,7 @@ Bildschirmkoordinaten sind zuverlässiger.
 ### Offen
 
 - scrcpy starten, bevor die Capture-Karte eingesteckt ist (sollte durch das Neu-Einlesen ebenfalls gehen)
-- DeX: `--display-id=<DeX-ID>`, 1:1-Abbildung
+- DeX automatisch erkennen (bisher `--display-id` von Hand; die ID kann sich ändern)
 - MOD+r (Handy drehen)
 - Vollständiger Login mit Freigabe per Authenticator
 - Mesh/AP-Wechsel: wird die Freigabe „Wireless Debugging in diesem Netzwerk“ erneut erfragt?
