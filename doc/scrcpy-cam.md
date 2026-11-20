@@ -228,7 +228,7 @@ Kurzfassung:
 | Kopplung verfällt nach 7 Tagen ohne Nutzung | Entwickleroptionen: „Zeitüberschreitung der ADB-Autorisierung deaktivieren“. |
 | Samsung blockiert ADB | „Automatische Sperre“ (Auto Blocker) aus. |
 | Neustart → Handy gesperrt bis PIN | **Standard:** Neustarts vermeiden (automatischen Neustart und Auto-Updates aus), nach einem Neustart PIN am Handy eingeben. **Optional** (Zusatzhardware): Bluetooth-Tastatur per ESP32 ([`tools/bt-hid`](../tools/bt-hid)) gibt die PIN vom PC aus ein – sie verbindet sich schon vor dem ersten Entsperren. *Getestet auf Testgerät A.* Wireless Debugging muss danach noch eingeschaltet werden (von Hand oder per Automations-App). |
-| Mesh-WLAN | Android merkt sich die Freigabe „Immer in diesem Netzwerk zulassen“ **pro Access Point (BSSID)** und schaltet Wireless Debugging bei einem AP-Wechsel ab (AOSP `AdbDebuggingManager`). Jeder AP muss einmal am Handy bestätigt werden; danach schaltet die optionale App nach einem Wechsel selbst wieder ein. *Am echten Mesh noch ungetestet.* |
+| Mesh-WLAN | Android merkt sich die Freigabe „Immer in diesem Netzwerk zulassen“ **pro Access Point (BSSID)** und schaltet Wireless Debugging bei einem AP-Wechsel ab (AOSP `AdbDebuggingManager`). Jeder AP muss einmal am Handy bestätigt werden – **auch 2,4 und 5 GHz desselben Routers** (getrennte BSSIDs; auf Testgerät A nach einem Neustart beobachtet). Danach schaltet die optionale App nach einem Wechsel selbst wieder ein. *Am echten Mesh noch ungetestet.* |
 
 Alternativen zu WLAN wurden geprüft und verworfen: Ein USB-C-Anschluss kann nicht gleichzeitig
 HDMI-Hub (Handy = Host) und ADB-Gerät (Handy = Device) bedienen; ADB über Ethernet am Hub
@@ -485,8 +485,8 @@ Bildschirmkoordinaten sind zuverlässiger.
 - MOD+r (Handy drehen)
 - Vollständiger Login mit Freigabe per Authenticator
 - Mesh/AP-Wechsel: wird die Freigabe „Wireless Debugging in diesem Netzwerk“ erneut erfragt?
-- Optional: App „WLAN-Debugging“ (`tools/adbwifi-android`) auf Testgerät A und B: Automatik,
-  Kachel, Neustart, Mesh-AP-Wechsel
+- Optional: App „WLAN-Debugging“ (`tools/adbwifi-android`) auf Testgerät B und am Mesh
+  (Testgerät A bestanden, siehe README der App)
 - Optional: bt-hid auf Testgerät B (Kopplung, Entsperren, Neustart)
 
 ### 19.11.2026 – Testgerät A, optionale Bluetooth-Tastatur (`tools/bt-hid`, ESP32-C3 SuperMini)

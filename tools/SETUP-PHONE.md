@@ -34,8 +34,10 @@ Das lässt sich nur am Gerät beheben. Neustarts also vermeiden.
 - [ ] Im Router für das Handy eine **feste IP** (DHCP-Reservierung) einrichten.
 - [ ] WLAN → Intelligentes WLAN → **Zu mobilen Daten wechseln aus**.
 - [ ] Kein Gäste-WLAN und keine Client-Isolation: Der PC findet das Handy per mDNS (Multicast).
-- [ ] ⚠ Mesh/Repeater: Falls Android die Freigabe „Wireless Debugging in diesem Netzwerk“ pro Access Point
-      speichert, muss das Handy an jedem AP einmal bestätigt werden (oder fest an einem AP bleiben).
+- [ ] ⚠ Android speichert die Freigabe „Wireless Debugging in diesem Netzwerk“ **pro Access Point (BSSID)**.
+      Auch 2,4 und 5 GHz desselben Routers zählen getrennt, bei Mesh/Repeater jeder Knoten. Jede Rückfrage
+      beim Einrichten mit „Immer zulassen“ bestätigen, bis keine mehr kommt – oder dem Handy nur ein Band
+      bzw. einen Access Point anbieten (z. B. eigene SSID nur für 5 GHz).
 
 ## 4. Koppeln mit dem PC
 

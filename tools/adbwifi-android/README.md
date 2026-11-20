@@ -82,7 +82,11 @@ ausgenommen ist, und hat einen Knopf dafür. Bei Samsung zusätzlich: Akku → H
 - **Vertrauenswürdiges Netz:** Wireless Debugging startet nur in einem WLAN, das am Handy einmal mit
   „Immer in diesem Netzwerk zulassen“ bestätigt wurde. Android merkt sich das **pro Access Point
   (BSSID)**, nicht pro WLAN-Name: Bei Mesh-WLAN oder mehreren Access Points muss jeder einmal
-  bestätigt werden. Das kann keine App übernehmen.
+  bestätigt werden – **auch die beiden Funkbänder (2,4 und 5 GHz) eines Routers** haben getrennte
+  BSSIDs. Auf Testgerät A kam nach einem Neustart die Rückfrage, weil sich das Handy diesmal mit dem
+  anderen Band verbunden hatte. Das kann keine App übernehmen. Abhilfe: beim Einrichten jede
+  Rückfrage mit „Immer zulassen“ bestätigen, bis keine mehr kommt; oder am Router für das Handy nur
+  ein Band anbieten (z. B. eigene SSID nur für 5 GHz).
 - **Nach einem Neustart** laufen Apps erst nach dem ersten Entsperren (PIN). Danach schaltet die App
   sofort ein. PIN ohne Eingriff am Gerät: optional per Bluetooth-Tastatur ([`bt-hid`](../bt-hid)).
 - Die Kachel und das Icon schalten nur ein, wenn WLAN verbunden ist.
@@ -115,7 +119,17 @@ Points, ohne auf ein Zeitintervall zu warten.
 | Neustart | ✅ 39 s nach dem Neustart-Befehl wieder an (`BOOT_COMPLETED`) |
 | Ressourcen | kein Dienst, Prozess nur zwischengespeichert (≈ 5 MB PSS), Standby-Bucket „exempted“ |
 
-Auf echten Geräten noch offen: Testgerät A/B, Neustart mit PIN, Mesh-AP-Wechsel.
+## Test auf Testgerät A (Android 13)
+
+| Test | Ergebnis |
+|---|---|
+| `build.ps1 -Install` | ✅ |
+| `adb_wifi_enabled=0` per adb (trennt adb) | ✅ nach ≈ 10 s wieder per adb erreichbar (neuer Port, per mDNS gefunden) |
+| Kachel hinzufügen, aus/an | ✅ |
+| WLAN aus → an | ✅ Wireless Debugging kommt von selbst zurück; adb verbindet der Launcher neu |
+| Neustart → PIN von Hand | ✅ nach dem Entsperren wieder an – hier erst nach der Rückfrage „In diesem Netzwerk zulassen?“, weil das Handy sich mit dem anderen Funkband (neue BSSID) verbunden hatte; nach „Immer zulassen“ ohne weiteren Eingriff |
+
+Noch offen: Testgerät B (Android 17), Wechsel zwischen Mesh-Access-Points.
 
 ## Aufbau
 
