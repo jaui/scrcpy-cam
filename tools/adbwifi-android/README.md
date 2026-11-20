@@ -28,7 +28,7 @@ Auslöser – ohne dauerhaft laufenden Dienst:
 |---|---|
 | JobScheduler-Job auf Änderungen von `adb_wifi_enabled` | Hauptauslöser: Android hat abgeschaltet (WLAN weg, AP-Wechsel) |
 | einmaliger Job mit Bedingung „WLAN verbunden“ | wird geplant, wenn kein WLAN da ist; läuft, sobald es zurück ist |
-| `BOOT_COMPLETED` | nach Neustart (kommt erst nach dem ersten Entsperren) |
+| `BOOT_COMPLETED` | nach Neustart (kommt erst nach dem ersten Entsperren); einmaliger „Anstoß“, siehe unten |
 | periodischer Job alle 15 min (nur im WLAN) | Sicherheitsnetz, beendet auch eine abgelaufene Pause |
 
 Ein Netzwerk-Callback per PendingIntent eignet sich nicht: Android sendet ihn nur einmal und gibt
@@ -152,7 +152,18 @@ Zusätzlich reagiert sie sofort auf den Wechsel des Access Points statt auf ein 
 
 | WLAN aus → an | ✅ Wireless Debugging kommt von selbst zurück (neuer Port, per mDNS erreichbar) |
 
-Noch offen: Neustart auf Testgerät B; Wechsel zwischen Mesh-Access-Points.
+| Neustart → PIN von Hand | ❌ in Version 1.0.0: Wireless Debugging blieb aus (siehe unten) – ✅ mit „Anstoß“ ≈ 10 s nach dem Entsperren wieder an |
+
+**Neustart unter Android 17:** Hier bleibt `adb_wifi_enabled` über den Neustart auf 1. Android
+versucht Wireless Debugging schon beim Start einzuschalten, findet aber noch kein verbundenes WLAN,
+gibt auf und versucht es nicht erneut – die Einstellung steht trotzdem weiter auf 1. Ohne Änderung
+der Einstellung löste nichts aus. Deshalb schreibt die App nach dem Neustart, sobald WLAN verbunden
+ist, **einmal 0**; der Job auf die Einstellung schreibt sofort wieder 1, und Android startet den
+Dienst. Beobachtet auf Testgerät B (Systemprotokoll: „Not connected to any wireless network“ beim
+Start; nach dem Anstoß „Received tls port=…“). Bei einem App-Update geschieht das nicht, damit eine
+laufende adb-Verbindung bestehen bleibt.
+
+Noch offen: Wechsel zwischen Mesh-Access-Points.
 
 ## Aufbau
 

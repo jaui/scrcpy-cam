@@ -27,6 +27,7 @@ object AdbWifi {
     private const val KEY_AUTO = "auto"
     private const val KEY_PAUSED_UNTIL = "paused_until"
     private const val KEY_ATTEMPTS = "attempts"
+    private const val KEY_KICK = "kick_pending"
     const val PAUSE_MS = 60 * 60 * 1000L
 
     private fun prefs(ctx: Context): SharedPreferences =
@@ -86,6 +87,35 @@ object AdbWifi {
 
     private fun storeAttempts(ctx: Context, list: List<Long>) {
         prefs(ctx).edit().putString(KEY_ATTEMPTS, list.joinToString(",")).apply()
+    }
+
+    /** Called at boot: check once that Wireless Debugging really runs (see [kickIfPending]). */
+    fun requestKick(ctx: Context) {
+        prefs(ctx).edit().putBoolean(KEY_KICK, true).apply()
+    }
+
+    /**
+     * Android 17 keeps `adb_wifi_enabled=1` across a reboot. If Wi-Fi is not connected yet when
+     * the system tries to start Wireless Debugging at boot, it gives up and does not retry, while
+     * the setting still says 1 (observed on test device B). Nothing would trigger then.
+     *
+     * Once Wi-Fi is connected, write 0 once. The content-trigger job sees the change and writes 1
+     * again, which starts the service for real. Returns true if 0 was written.
+     */
+    fun kickIfPending(ctx: Context, reason: String): Boolean {
+        if (!prefs(ctx).getBoolean(KEY_KICK, false)) return false
+        if (!isAuto(ctx) || !hasPermission(ctx)) {
+            prefs(ctx).edit().remove(KEY_KICK).apply()
+            return false
+        }
+        if (wifiNetwork(ctx) == null) {
+            Triggers.scheduleWifiJob(ctx) // keep the kick pending until Wi-Fi is there
+            return false
+        }
+        prefs(ctx).edit().remove(KEY_KICK).apply()
+        if (!isOn(ctx)) return false // normal path switches on
+        Log.i(TAG, "$reason: KICK")
+        return write(ctx, 0)
     }
 
     /** Switches Wireless Debugging off (tile). Returns false without permission. */

@@ -9,12 +9,18 @@ import android.content.Intent
 /** Boot (after the first unlock) and app update: set up triggers and switch on. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
-        when (intent.action) {
+        val action = intent.action ?: return
+        when (action) {
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 AdbWifi.resume(ctx)
+                // Only at boot: an update installed over adb must not drop that connection.
+                if (action == Intent.ACTION_BOOT_COMPLETED) AdbWifi.requestKick(ctx)
                 Triggers.apply(ctx)
-                // Wi-Fi may not be connected yet; then the Wi-Fi job takes over.
-                AdbWifi.enableIfAllowed(ctx, manual = false, reason = intent.action!!)
+                // A kick writes 0; the content-trigger job then switches on again.
+                // Without Wi-Fi yet, the Wi-Fi job takes over.
+                if (!AdbWifi.kickIfPending(ctx, action)) {
+                    AdbWifi.enableIfAllowed(ctx, manual = false, reason = action)
+                }
             }
         }
     }
@@ -26,7 +32,10 @@ class EnableJobService : JobService() {
         if (params.jobId == Triggers.JOB_CONTENT && AdbWifi.isAuto(this)) {
             Triggers.scheduleContentJob(this)
         }
-        AdbWifi.enableIfAllowed(this, manual = false, reason = "job${params.jobId}")
+        val reason = "job${params.jobId}"
+        if (!AdbWifi.kickIfPending(this, reason)) {
+            AdbWifi.enableIfAllowed(this, manual = false, reason = reason)
+        }
         return false
     }
 
