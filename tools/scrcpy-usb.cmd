@@ -21,8 +21,9 @@ if not exist "%DIR%scrcpy.exe" (
 )
 
 cd /d "%DIR%"
-rem -d: das per USB angeschlossene Geraet (auch wenn es zusaetzlich per WLAN verbunden ist)
-scrcpy.exe -d %*
+rem -d: das per USB angeschlossene Geraet (auch wenn es zusaetzlich per WLAN verbunden ist).
+rem Voller Pfad: mit NoDefaultCurrentDirectoryInExePath sucht cmd.exe nicht im aktuellen Ordner.
+"%DIR%scrcpy.exe" -d %*
 if errorlevel 1 (
     echo.
     echo scrcpy ist mit Fehler beendet. Pruefen: USB-Kabel, USB-Debugging am Handy,

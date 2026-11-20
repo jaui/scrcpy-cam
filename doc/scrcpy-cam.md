@@ -238,6 +238,10 @@ genau wie bei normalem scrcpy. Für diese Apps braucht es die Capture-Karte.
 Hinweis: Solange am Handy HDMI bzw. DeX aktiv ist, lieferte auf Testgerät B auch das offizielle
 scrcpy 5.0.1 keine Bilder (0 fps). Im Notbetrieb hängt kein HDMI am Handy.
 
+*Getestet (20.11.2026, Testgerät B):* Handy per USB statt am Hub, zusätzlich per WLAN verbunden –
+`scrcpy-usb.cmd` wählt das USB-Gerät, Bild kommt (bis 118 fps bei Bewegung, Dekodierung per
+GPU).
+
 ## 8. WLAN-ADB ohne Eingriff am Handy
 
 Ausführliche Checkliste: [`tools/SETUP-PHONE.md`](../tools/SETUP-PHONE.md).
