@@ -224,7 +224,7 @@ Kurzfassung:
 | Problem | Lösung |
 |---|---|
 | Port ändert sich bei jedem Einschalten | Kein Problem: Kopplung bleibt, adb findet das Handy per mDNS; der Launcher verbindet neu. *Getestet: neuer Port, ohne neues Koppeln.* |
-| Wireless Debugging geht nach Neustart/WLAN-Verlust/AP-Wechsel aus | **Standard: bei Bedarf am Handy von Hand wieder einschalten.** Optional: eigene App „WLAN-Debugging“ ([`tools/adbwifi-android`](../tools/adbwifi-android), ≈ 45 KB, Kachel + Icon + Automatik) oder MacroDroid/Tasker; beide setzen mit `WRITE_SECURE_SETTINGS` `adb_wifi_enabled=1`. |
+| Wireless Debugging geht nach Neustart/WLAN-Verlust/AP-Wechsel aus | **Standard: bei Bedarf am Handy von Hand wieder einschalten.** Optional: eigene App „WLAN-Debugging“ ([`tools/adbwifi-android`](../tools/adbwifi-android), ≈ 40 KB, Kachel + Icon + Automatik) oder MacroDroid/Tasker; beide setzen mit `WRITE_SECURE_SETTINGS` `adb_wifi_enabled=1`. |
 | Kopplung verfällt nach 7 Tagen ohne Nutzung | Entwickleroptionen: „Zeitüberschreitung der ADB-Autorisierung deaktivieren“. |
 | Samsung blockiert ADB | „Automatische Sperre“ (Auto Blocker) aus. |
 | Neustart → Handy gesperrt bis PIN | **Standard:** Neustarts vermeiden (automatischen Neustart und Auto-Updates aus), nach einem Neustart PIN am Handy eingeben. **Optional** (Zusatzhardware): Bluetooth-Tastatur per ESP32 ([`tools/bt-hid`](../tools/bt-hid)) gibt die PIN vom PC aus ein – sie verbindet sich schon vor dem ersten Entsperren. *Getestet auf Testgerät A.* Wireless Debugging muss danach noch eingeschaltet werden (von Hand oder per Automations-App). |

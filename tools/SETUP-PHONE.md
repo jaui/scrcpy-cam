@@ -62,7 +62,7 @@ Bebilderte Anleitung (HTML/PDF): [`doc/anleitung-wlan-debugging/`](../doc/anleit
 **Optional A – eigene App „WLAN-Debugging“** ([`tools/adbwifi-android`](adbwifi-android)):
 schaltet Wireless Debugging nach Neustart (nach dem Entsperren), WLAN-Verlust und
 Access-Point-Wechsel selbst wieder ein; dazu Schnelleinstellungs-Kachel und App-Icon.
-Klein (≈ 45 KB), ohne Drittanbieter. Einrichten am PC mit `tools\adbwifi-android\build.ps1 -Install`
+Klein (≈ 40 KB), ohne Drittanbieter. Einrichten am PC mit `tools\adbwifi-android\build.ps1 -Install`
 (installiert, erteilt das Recht, nimmt die App von der Akku-Optimierung aus).
 
 **Optional B – Automations-App** (ungetestet):

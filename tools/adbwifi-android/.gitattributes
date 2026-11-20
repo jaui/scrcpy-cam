@@ -1,0 +1,4 @@
+# Gradle wrapper: the batch file needs CRLF (cmd.exe), the shell script LF
+*.bat text eol=crlf
+gradlew text eol=lf
+*.jar binary

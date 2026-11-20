@@ -3,7 +3,7 @@
 > **Optionales Zusatzmodul.** scrcpy-cam funktioniert ohne diese App; Wireless Debugging lässt sich
 > immer auch von Hand einschalten ([`SETUP-PHONE.md`](../SETUP-PHONE.md), Abschnitt 5).
 
-Kleine Android-App (≈ 45 KB, keine Bibliotheken, kein Internet-Zugriff), die **Wireless Debugging
+Kleine Android-App (≈ 40 KB, keine Bibliotheken, kein Internet-Zugriff), die **Wireless Debugging
 wieder einschaltet**, wenn Android es abgeschaltet hat:
 
 - **automatisch** (abschaltbar): nach einem Neustart (sobald das Handy entsperrt ist), wenn das WLAN
@@ -115,7 +115,7 @@ kein Code):
   eingeschaltet ist. Auf Testgerät B belegte MacroDroid ≈ 225 MB (PSS, großteils ausgelagert).
 
 Diese App macht nur das eine, ohne Dienst, Bibliotheken oder Internet-Recht, mit einem Bruchteil
-der Größe (≈ 45 KB statt ≈ 90 MB) und ohne Abhängigkeit von Updates eines Drittanbieters.
+der Größe (≈ 40 KB statt ≈ 90 MB) und ohne Abhängigkeit von Updates eines Drittanbieters.
 Zusätzlich reagiert sie sofort auf den Wechsel des Access Points statt auf ein Zeitintervall.
 
 ## Test im Emulator (Android 16, API 36)
@@ -124,7 +124,7 @@ Zusätzlich reagiert sie sofort auf den Wechsel des Access Points statt auf ein 
 |---|---|
 | Installation mit `build.ps1 -Install` (Recht, Akku-Ausnahme, Start) | ✅ |
 | Erstes Einschalten in nicht bestätigtem WLAN | Android fragt nach; 3 Versuche, dann Ratenbegrenzung (keine Dauerschleife) ✅ |
-| Android setzt `adb_wifi_enabled=0` (4× im Abstand von 12 s) | ✅ jeweils nach ≈ 0,95 s wieder an, keine Begrenzung |
+| Android setzt `adb_wifi_enabled=0` (4× im Abstand von 12 s) | ✅ jeweils nach ≈ 0,95 s wieder an (gemessen mit einer früheren Zählweise; die aktuelle Version begrenzt ab dem 4. automatischen Versuch innerhalb von 10 min) |
 | WLAN aus → an | ✅ 6,3 s nach dem Einschalten des WLANs wieder an |
 | Kachel aus / an | ✅ „pausiert bis …“, Automatik greift nicht; an → sofort an |
 | Schalter „Automatisch“ aus | ✅ bleibt aus, keine Jobs mehr geplant |
