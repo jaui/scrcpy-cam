@@ -5,8 +5,8 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-val APP_VERSION_CODE = 1
-val APP_VERSION_NAME = "1.0.0"
+val APP_VERSION_CODE = 2
+val APP_VERSION_NAME = "1.1.0"
 
 /**
  * Release signing material, kept out of the repository. Looked up in this order:

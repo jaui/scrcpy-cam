@@ -8,8 +8,11 @@ wieder einschaltet**, wenn Android es abgeschaltet hat:
 
 - **automatisch** (abschaltbar): nach einem Neustart (sobald das Handy entsperrt ist), wenn das WLAN
   zurückkommt und nach einem Wechsel des Access Points
-- **Schnelleinstellungs-Kachel** „WLAN-Debugging“: zeigt den Zustand, schaltet um
-- **App-Icon** auf dem Startbildschirm: Antippen schaltet ein und zeigt den Zustand
+- **Schnelleinstellungs-Kachel** „WLAN-Debugging“: zeigt den Zustand, schaltet um; langes Drücken
+  öffnet die App
+- **App** (Icon: Käfer mit WLAN-Wellen): großer Ein/Aus-Schalter für Wireless Debugging, Schalter
+  für die Automatik und Anzeige, ob die Einrichtung vollständig ist. Das Öffnen allein schaltet
+  nichts.
 
 Sie ersetzt eine Automations-App wie MacroDroid für genau diese eine Aufgabe und hängt nicht von
 deren Updates ab.
@@ -40,8 +43,8 @@ in unbekannten WLANs auch dann, wenn Android die Auslöser verzögert. Häufige 
 das Limit ebenfalls erreichen. Danach wartet die App auf einen weiteren Auslöser. Manuelles
 Einschalten bleibt möglich.
 
-**Kachel „aus“** pausiert die Automatik für eine Stunde (oder bis zum Neustart); die Kachel zeigt
-„pausiert bis …“. Dauerhaft abschalten lässt sie sich nur in der App (Schalter „Automatisch wieder
+**Ausschalten** (Kachel oder großer Schalter in der App) pausiert die Automatik für eine Stunde
+(oder bis zum Neustart); Kachel und App zeigen „pausiert bis …“. Dauerhaft abschalten lässt sie sich nur in der App (Schalter „Automatisch wieder
 einschalten“). Zeitbasiert, damit ein versehentliches Antippen nie dauerhaft wirkt.
 
 ## Bauen
@@ -89,7 +92,7 @@ ausgenommen ist, und hat einen Knopf dafür. Bei Samsung zusätzlich: Akku → H
   ein Band anbieten (z. B. eigene SSID nur für 5 GHz).
 - **Nach einem Neustart** laufen Apps erst nach dem ersten Entsperren (PIN). Danach schaltet die App
   sofort ein. PIN ohne Eingriff am Gerät: optional per Bluetooth-Tastatur ([`bt-hid`](../bt-hid)).
-- Die Kachel und das Icon schalten nur ein, wenn WLAN verbunden ist.
+- Kachel und App schalten nur ein, wenn WLAN verbunden ist.
 
 ## Sicherheit
 
@@ -129,6 +132,8 @@ Zusätzlich reagiert sie sofort auf den Wechsel des Access Points statt auf ein 
 | Kachel aus / an | ✅ „pausiert bis …“, Automatik greift nicht; an → sofort an |
 | Schalter „Automatisch“ aus | ✅ bleibt aus, keine Jobs mehr geplant |
 | Neustart | ✅ 39 s nach dem Neustart-Befehl wieder an (`BOOT_COMPLETED`) |
+| Version 1.1.0: großer Schalter aus / an, hell und dunkel | ✅ aus bleibt aus (Automatik pausiert), an sofort an; TalkBack erkennt beide Schalter |
+| Version 1.1.0: Kachel lange drücken | ✅ öffnet die App |
 | Ressourcen | kein Dienst, Prozess nur zwischengespeichert (≈ 5 MB PSS), Standby-Bucket „exempted“ |
 
 ## Test auf Testgerät A (Android 13)
@@ -174,5 +179,6 @@ app/src/main/java/com/github/jaui/adbwifi/
   Triggers.kt            Jobs planen/entfernen
   Receivers.kt           BootReceiver, EnableJobService
   AdbWifiTileService.kt  Schnelleinstellungs-Kachel
-  MainActivity.kt        App-Icon: einschalten + Status
+  MainActivity.kt        App: Ein/Aus-Schalter, Automatik, Einrichtung
+  ToggleSwitch.kt        großer Schalter mit „AN“/„AUS“ (meldet sich als Switch an TalkBack)
 ```

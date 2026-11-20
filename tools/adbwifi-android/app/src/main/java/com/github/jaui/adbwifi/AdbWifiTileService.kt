@@ -15,7 +15,8 @@ import java.util.Date
 
 /**
  * Quick-settings tile. On → off pauses automatic mode for one hour (or until reboot), so an
- * accidental tap cannot switch the automation off for good (that is only possible in the app). Bound only while the shade is open; the observer lives exactly that long.
+ * accidental tap cannot switch the automation off for good (that is only possible in the app).
+ * Long press opens the app (QS_TILE_PREFERENCES in the manifest). Bound only while the shade is open; the observer lives exactly that long.
  */
 class AdbWifiTileService : TileService() {
 

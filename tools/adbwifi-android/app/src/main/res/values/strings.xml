@@ -5,20 +5,30 @@
     <string name="tile_auto_on">Automatik an</string>
     <string name="tile_auto_off">Automatik aus</string>
     <string name="tile_paused">pausiert bis %1$s</string>
-
-    <string name="status_on">Wireless Debugging ist AN</string>
-    <string name="status_off">Wireless Debugging ist aus</string>
-    <string name="status_no_wifi">Wireless Debugging ist aus – kein WLAN verbunden</string>
     <string name="status_no_permission">keine Berechtigung</string>
 
-    <string name="button_enable">Jetzt einschalten</string>
-    <string name="auto_switch">Automatisch wieder einschalten</string>
-    <string name="auto_hint">Schaltet Wireless Debugging nach Neustart (nach dem Entsperren), nach WLAN-Verlust und Access-Point-Wechsel wieder ein. Die Kachel „aus“ pausiert nur für eine Stunde (oder bis zum Neustart).</string>
+    <string name="switch_main">Wireless Debugging</string>
+    <string name="state_on">AN</string>
+    <string name="state_off">AUS</string>
+    <string name="detail_on">Läuft – der PC kann sich per WLAN verbinden.</string>
+    <string name="detail_off">Ausgeschaltet.</string>
+    <string name="detail_no_wifi">Kein WLAN verbunden.</string>
+    <string name="detail_paused">Ausgeschaltet. Die Automatik ist pausiert bis %1$s.</string>
+    <string name="detail_no_permission">Berechtigung fehlt – siehe Einrichtung unten.</string>
+    <string name="toast_no_wifi">Kein WLAN verbunden – Wireless Debugging geht nur im WLAN.</string>
+    <string name="toast_no_permission">Berechtigung fehlt – siehe Einrichtung.</string>
 
-    <string name="permission_ok">Berechtigung: vorhanden</string>
+    <string name="auto_switch">Automatisch wieder einschalten</string>
+    <string name="auto_hint">Nach Neustart und WLAN-Verlust. Ausschalten pausiert die Automatik 1 Stunde.</string>
+
+    <string name="setup_title">Einrichtung</string>
+    <string name="setup_complete">Einrichtung vollständig</string>
+    <string name="mark_ok">✓</string>
+    <string name="mark_missing">!</string>
+    <string name="permission_ok">Berechtigung vorhanden</string>
     <string name="permission_missing">Berechtigung fehlt. Einmalig am PC ausführen:\nadb shell pm grant %1$s android.permission.WRITE_SECURE_SETTINGS</string>
-    <string name="battery_ok">Akku-Optimierung: ausgenommen</string>
-    <string name="battery_missing">Akku-Optimierung: aktiv – die Automatik kann sich um Stunden verzögern. Bitte ausnehmen.</string>
+    <string name="battery_ok">Von der Akku-Optimierung ausgenommen</string>
+    <string name="battery_missing">Akku-Optimierung aktiv – die Automatik kann sich um Stunden verzögern.</string>
     <string name="battery_button">Von Akku-Optimierung ausnehmen</string>
     <string name="version">Version %1$s</string>
 </resources>
