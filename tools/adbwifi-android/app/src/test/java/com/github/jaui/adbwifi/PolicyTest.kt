@@ -41,7 +41,7 @@ class PolicyTest {
     }
 
     private fun decideWithStored(stored: List<Long>, manual: Boolean = false) =
-        Policy.decide(input(attempts = Policy.recentAttempts(stored, now), manual = manual))
+        Policy.decide(input(attempts = stored, manual = manual))
 
     @Test fun rateLimitAfterThreeQuickFailures() {
         // untrusted network: Android switched off again right after each attempt
@@ -50,28 +50,21 @@ class PolicyTest {
         assertEquals(Decision.ENABLE, decideWithStored(loop, manual = true))
     }
 
-    @Test fun attemptThatHeldIsNotCounted() {
-        // two earlier failures, then an attempt that held for a while
-        val stored = listOf(now - 120_000, now - 119_000, now - 60_000)
-        assertEquals(listOf(now - 120_000, now - 119_000), Policy.recentAttempts(stored, now))
-        assertEquals(Decision.ENABLE, decideWithStored(stored))
-    }
-
-    @Test fun repeatedWifiDropsNeverLimited() {
-        // each attempt held >10 s: list never grows beyond the one latest entry
+    @Test fun rateLimitAfterThreeAttemptsEvenIfJobsAreDelayed() {
         var stored = emptyList<Long>()
-        for (t in listOf(now - 300_000, now - 200_000, now - 100_000)) {
+        for (t in listOf(now - 36_000, now - 24_000, now - 12_000)) {
+            assertEquals(Decision.ENABLE, Policy.decide(input(attempts = stored).copy(now = t)))
             stored = Policy.recentAttempts(stored, t) + t
         }
-        assertEquals(listOf(now - 100_000), stored)
-        assertEquals(emptyList<Long>(), Policy.recentAttempts(stored, now))
-        assertEquals(Decision.ENABLE, decideWithStored(stored))
+        assertEquals(Decision.RATE_LIMITED, decideWithStored(stored))
+        assertEquals(Decision.ENABLE, decideWithStored(stored, manual = true))
     }
 
     @Test fun oldFailuresExpire() {
         val old = listOf(now - Policy.WINDOW_MS - 2_000, now - Policy.WINDOW_MS - 1_000,
             now - Policy.WINDOW_MS)
         assertEquals(emptyList<Long>(), Policy.recentAttempts(old, now))
+        assertEquals(Decision.ENABLE, decideWithStored(old))
     }
 
     @Test fun futureTimestampsIgnored() {

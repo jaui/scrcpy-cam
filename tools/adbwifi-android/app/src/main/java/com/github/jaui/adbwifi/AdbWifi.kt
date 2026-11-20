@@ -98,7 +98,7 @@ object AdbWifi {
     fun enableIfAllowed(ctx: Context, manual: Boolean, reason: String): Policy.Decision {
         if (manual) resume(ctx)
         val now = System.currentTimeMillis()
-        val recent = Policy.recentAttempts(attempts(ctx), now)
+        val stored = attempts(ctx)
         val decision = Policy.decide(
             Policy.Input(
                 hasPermission = hasPermission(ctx),
@@ -106,14 +106,14 @@ object AdbWifi {
                 wifiConnected = wifiNetwork(ctx) != null,
                 autoEnabled = isAuto(ctx),
                 paused = isPaused(ctx),
-                attempts = recent,
+                attempts = stored,
                 now = now,
                 manual = manual,
             )
         )
         if (decision == Policy.Decision.ENABLE) {
-            if (!manual) storeAttempts(ctx, recent + now)
             if (!write(ctx, 1)) return Policy.Decision.NO_PERMISSION
+            if (!manual) storeAttempts(ctx, Policy.recentAttempts(stored, now) + now)
         }
         // No Wi-Fi: a one-shot job runs as soon as Wi-Fi is connected again.
         if (decision == Policy.Decision.NO_WIFI && isAuto(ctx)) Triggers.scheduleWifiJob(ctx)

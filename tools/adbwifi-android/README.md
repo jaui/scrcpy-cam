@@ -34,11 +34,11 @@ Auslöser – ohne dauerhaft laufenden Dienst:
 Ein Netzwerk-Callback per PendingIntent eignet sich nicht: Android sendet ihn nur einmal und gibt
 ihn 5 s später frei (AOSP `ConnectivityService`), im Emulator nachvollzogen.
 
-Eingeschaltet wird nur bei verbundenem WLAN. **Ratenbegrenzung:** Ist der Access Point nicht als
-vertrauenswürdig bekannt, schaltet Android sofort wieder ab und fragt am Handy nach. Solche
-Fehlversuche (wieder aus binnen 10 s) zählen; nach 3 in 10 Minuten wartet die App auf den nächsten
-periodischen Lauf. Versuche, die gehalten haben, zählen nicht – normale WLAN-Abbrüche werden nie
-begrenzt.
+Eingeschaltet wird nur bei verbundenem WLAN. **Ratenbegrenzung:** Die App startet innerhalb von
+10 Minuten höchstens drei automatische Aktivierungen. Das begrenzt wiederholte Freigabedialoge
+in unbekannten WLANs auch dann, wenn Android die Auslöser verzögert. Häufige WLAN-Abbrüche können
+das Limit ebenfalls erreichen. Danach wartet die App auf einen weiteren Auslöser. Manuelles
+Einschalten bleibt möglich.
 
 **Kachel „aus“** pausiert die Automatik für eine Stunde (oder bis zum Neustart); die Kachel zeigt
 „pausiert bis …“. Dauerhaft abschalten lässt sie sich nur in der App (Schalter „Automatisch wieder
@@ -100,11 +100,23 @@ ausgenommen ist, und hat einen Knopf dafür. Bei Samsung zusätzlich: Akku → H
 
 ## Vergleich mit MacroDroid
 
-Die MacroDroid-Lösung aus [`SETUP-PHONE.md`](../SETUP-PHONE.md) (Aktion „Systemeinstellung ändern“,
-Tabelle *Global*, `adb_wifi_enabled` = 1) nutzt denselben Mechanismus und dasselbe per adb erteilte
-Recht. Diese App macht nur das, mit einem Bruchteil der Größe (45 KB statt rund 90 MB) und ohne
-Abhängigkeit von Updates eines Drittanbieters. Zusätzlich reagiert sie auf den Wechsel des Access
-Points, ohne auf ein Zeitintervall zu warten.
+Untersucht wurde MacroDroid 6.1.5 (APK vom Testgerät, mit jadx dekompiliert; hier nur das Verhalten,
+kein Code):
+
+- MacroDroid hat **keine eigene Funktion** für Wireless Debugging; `adb_wifi_enabled` kommt in der App
+  nicht vor. Die Lösung aus [`SETUP-PHONE.md`](../SETUP-PHONE.md) nutzt die allgemeine Aktion
+  „Systemeinstellung ändern“, in die man Tabelle *Global* und den Schlüssel selbst einträgt.
+- Diese Aktion schreibt mit Root per `settings put global …`, sonst über die Android-API
+  (`Settings.Global.putInt`) mit dem per adb erteilten `WRITE_SECURE_SETTINGS` – **derselbe
+  Mechanismus** wie diese App.
+- Um Auslöser zu erkennen, läuft MacroDroid als **dauerhafter Vordergrund-Dienst** mit ständiger
+  Benachrichtigung; dazu kommen Firebase-Messaging und ein WebView-Prozess. Das Manifest fordert
+  119 Berechtigungen an; eingebettete Werbe-/Analyse-Bibliotheken lesen u. a. aus, ob Debugging
+  eingeschaltet ist. Auf Testgerät B belegte MacroDroid ≈ 225 MB (PSS, großteils ausgelagert).
+
+Diese App macht nur das eine, ohne Dienst, Bibliotheken oder Internet-Recht, mit einem Bruchteil
+der Größe (≈ 45 KB statt ≈ 90 MB) und ohne Abhängigkeit von Updates eines Drittanbieters.
+Zusätzlich reagiert sie sofort auf den Wechsel des Access Points statt auf ein Zeitintervall.
 
 ## Test im Emulator (Android 16, API 36)
 
@@ -129,7 +141,14 @@ Points, ohne auf ein Zeitintervall zu warten.
 | WLAN aus → an | ✅ Wireless Debugging kommt von selbst zurück; adb verbindet der Launcher neu |
 | Neustart → PIN von Hand | ✅ nach dem Entsperren wieder an – hier erst nach der Rückfrage „In diesem Netzwerk zulassen?“, weil das Handy sich mit dem anderen Funkband (neue BSSID) verbunden hatte; nach „Immer zulassen“ ohne weiteren Eingriff |
 
-Noch offen: Testgerät B (Android 17), Wechsel zwischen Mesh-Access-Points.
+## Test auf Testgerät B (Android 17)
+
+| Test | Ergebnis |
+|---|---|
+| `build.ps1 -Install` | ✅ Recht erteilt, Akku-Ausnahme (Standby-Bucket „exempted“), Start ok |
+| `adb_wifi_enabled=0` per adb (trennt adb) | ✅ Job lief ≈ 0,5 s danach; Wireless Debugging neu gestartet (neuer Port), adb über denselben mDNS-Namen binnen ≈ 2 s wieder verbunden |
+
+Noch offen: Kachel, WLAN aus/an und Neustart auf Testgerät B; Wechsel zwischen Mesh-Access-Points.
 
 ## Aufbau
 

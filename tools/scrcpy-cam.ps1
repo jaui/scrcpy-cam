@@ -35,6 +35,7 @@ param(
 # Nicht 'Stop': unter Windows PowerShell 5.1 wird jede umgeleitete stderr-Zeile von adb
 # (z. B. "* daemon not running; starting now") sonst zum abbrechenden Fehler.
 $ErrorActionPreference = 'Continue'
+$ScrcpyDir = (Resolve-Path -LiteralPath $ScrcpyDir -ErrorAction Stop).Path
 $adb = Join-Path $ScrcpyDir 'adb.exe'
 $scrcpy = Join-Path $ScrcpyDir 'scrcpy.exe'
 foreach ($f in $adb, $scrcpy) {
@@ -51,26 +52,31 @@ function Get-ReadyDevices {
     foreach ($line in $out | Select-Object -Skip 1) {
         $parts = $line -split '\s+'
         if ($parts.Count -ge 2 -and $parts[1] -eq 'device') {
-            if (-not $Serial -or $parts[0] -like "*$Serial*") { $devs += $parts[0] }
+            $devs += $parts[0]
         }
     }
-    return ,$devs
+    return $devs
 }
 
 function Connect-Device {
-    $devs = Get-ReadyDevices
+    $devs = @(Get-ReadyDevices | Where-Object { -not $Serial -or $_ -like "*$Serial*" })
     if ($devs.Count -ge 1) { return $devs[0] }
 
     # Gekoppelte Geraete per mDNS suchen und verbinden (aktueller Port)
     $services = & $adb mdns services 2>$null
+    $addresses = @()
     foreach ($line in $services) {
         if ($line -match '^(\S+)\s+_adb-tls-connect\._tcp\.?\s+(\S+:\d+)') {
             $name = $Matches[1]; $addr = $Matches[2]
-            if ($Serial -and $name -notlike "*$Serial*") { continue }
+            if ($Serial -and $name -notlike "*$Serial*" -and $addr -notlike "*$Serial*") { continue }
+            $addresses += $addr
             & $adb connect $addr 2>&1 | Out-Null
         }
     }
-    $devs = Get-ReadyDevices
+    # Nach 'adb connect' kann adb das Geraet als IP:Port statt unter dem mDNS-Namen fuehren.
+    $devs = @(Get-ReadyDevices | Where-Object {
+        -not $Serial -or $_ -like "*$Serial*" -or $addresses -contains $_
+    })
     if ($devs.Count -ge 1) { return $devs[0] }
     return $null
 }

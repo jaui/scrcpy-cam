@@ -28,7 +28,7 @@ object Policy {
         val wifiConnected: Boolean,
         val autoEnabled: Boolean,
         val paused: Boolean,
-        /** Timestamps (ms) of earlier failed automatic attempts (see [recentAttempts]). */
+        /** Timestamps (ms) of earlier automatic activation attempts. */
         val attempts: List<Long>,
         val now: Long,
         /** Started by the user (tile, launcher icon, button): ignores automatic-mode settings. */
@@ -46,20 +46,8 @@ object Policy {
         else -> Decision.ENABLE
     }
 
-    /**
-     * Earlier attempts that count against the rate limit: only failed ones inside the window.
-     *
-     * An attempt counts as failed if Android switched off again within [STUCK_MS] (the
-     * untrusted-network loop: write 1 → system writes 0 → trigger again). If the latest attempt
-     * is older than that when the next trigger arrives, it held and is dropped, so ordinary
-     * Wi-Fi drops never hit the limit.
-     */
-    fun recentAttempts(attempts: List<Long>, now: Long): List<Long> {
-        val failed = attempts.lastOrNull()
-            ?.let { last -> if (now - last >= STUCK_MS) attempts.dropLast(1) else attempts }
-            ?: attempts
-        return failed.filter { now - it in 0 until WINDOW_MS }
-    }
-
-    const val STUCK_MS = 10_000L
+    // JobScheduler may deliver a settings change late, so elapsed time cannot
+    // tell us whether Android accepted an activation. Count each automatic write.
+    fun recentAttempts(attempts: List<Long>, now: Long): List<Long> =
+        attempts.filter { now - it in 0 until WINDOW_MS }
 }

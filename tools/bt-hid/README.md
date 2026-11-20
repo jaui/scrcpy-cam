@@ -67,6 +67,7 @@ python bthid.py --listen 30                                   # Ereignisse 30 s 
 - `TYPE -` fragt den Text verdeckt ab. So landet eine PIN weder in der Befehlszeile noch in der
   Shell-History. Der Inhalt von `TYPE` wird nie ausgegeben.
 - `SLEEP n` pausiert auf dem PC (wird nicht an den ESP32 gesendet).
+- Bei einem Fehler oder Timeout bricht das Werkzeug die Befehlsfolge ab.
 - `--port` setzt DTR/RTS nicht, damit der ESP32 beim Öffnen des Ports nicht neu startet.
 
 ## Protokoll (USB seriell, 115200 Baud, Zeilen mit `\n`)

@@ -72,22 +72,28 @@ Write-Host ("APK: {0} ({1:N0} KB{2})" -f $dest, ((Get-Item $dest).Length / 1KB),
 if (-not $Install) { exit 0 }
 
 if (-not (Test-Path $Adb)) { $Adb = 'adb' }
+$adbCommand = Get-Command -Name $Adb -CommandType Application -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+if (-not $adbCommand) { Write-Error "ADB nicht gefunden ($Adb)."; exit 1 }
+$Adb = $adbCommand.Path
 $sel = @()
 if ($Serial) { $sel = @('-s', $Serial) }
 
 function Invoke-Adb {
-    param([string[]]$AdbArgs)
+    param([string]$Step, [string[]]$AdbArgs, [switch]$CheckActivityStatus)
+    Write-Host "$Step ..."
     $out = & $Adb @sel @AdbArgs 2>&1
+    $rc = $LASTEXITCODE
     $out | ForEach-Object { Write-Host "  $_" }
-    return $LASTEXITCODE
+    if ($rc -ne 0) { Write-Error "$Step fehlgeschlagen (ADB-Exitcode $rc)."; exit $rc }
+    if ($CheckActivityStatus -and -not ($out | Where-Object { "$_" -match '^Status:\s+ok\s*$' })) {
+        Write-Error "$Step fehlgeschlagen (kein erfolgreicher Activity-Start gemeldet)."
+        exit 1
+    }
 }
 
-Write-Host 'Installiere ...'
-if ((Invoke-Adb @('install', '-r', $dest)) -ne 0) { Write-Error 'Installation fehlgeschlagen.'; exit 1 }
-Write-Host 'Erteile WRITE_SECURE_SETTINGS ...'
-Invoke-Adb @('shell', 'pm', 'grant', $pkg, 'android.permission.WRITE_SECURE_SETTINGS') | Out-Null
-Write-Host 'Nehme von der Akku-Optimierung aus ...'
-Invoke-Adb @('shell', 'cmd', 'deviceidle', 'whitelist', "+$pkg") | Out-Null
-Write-Host 'Starte die App einmal (registriert die Ausloeser) ...'
-Invoke-Adb @('shell', 'am', 'start', '-n', "$pkg/.MainActivity") | Out-Null
+Invoke-Adb 'APK installieren' @('install', '-r', $dest)
+Invoke-Adb 'WRITE_SECURE_SETTINGS erteilen' @('shell', 'pm', 'grant', $pkg, 'android.permission.WRITE_SECURE_SETTINGS')
+Invoke-Adb 'Von der Akku-Optimierung ausnehmen' @('shell', 'cmd', 'deviceidle', 'whitelist', "+$pkg")
+Invoke-Adb 'App starten (registriert die Ausloeser)' @('shell', 'am', 'start', '-W', '-n', "$pkg/.MainActivity") -CheckActivityStatus
 Write-Host 'Fertig. Kachel am Handy hinzufuegen: Schnelleinstellungen -> Bearbeiten -> "WLAN-Debugging".'

@@ -120,7 +120,7 @@ sdl_configure_ctrl_c_windows(void) {
 #endif // _WIN32
 
 static enum scrcpy_exit_code
-event_loop(struct scrcpy *s, bool has_screen) {
+event_loop(struct scrcpy *s, bool has_screen, bool capture_started) {
     SDL_Event event;
     while (SDL_WaitEvent(&event)) {
         switch (event.type) {
@@ -148,6 +148,12 @@ event_loop(struct scrcpy *s, bool has_screen) {
             case SC_EVENT_CAPTURE_ERROR:
                 LOGE("Capture card error");
                 return SCRCPY_EXIT_FAILURE;
+            case SDL_EVENT_CAMERA_DEVICE_REMOVED:
+                if (capture_started) {
+                    sc_capture_on_camera_removed(&s->capture,
+                                                 event.cdevice.which);
+                }
+                break;
             case SC_EVENT_TIME_LIMIT_REACHED:
                 LOGI("Time limit reached");
                 return SCRCPY_EXIT_SUCCESS;
@@ -1082,7 +1088,7 @@ aoa_complete:
         }
     }
 
-    ret = event_loop(s, options->window);
+    ret = event_loop(s, options->window, capture_started);
 
     // Reject all new runnables, and execute the pending ones now
     // (they could access memory that will be cleaned up below)

@@ -8,7 +8,6 @@
 #include <libavutil/buffer.h>
 #include <libavutil/frame.h>
 #include <libavutil/pixfmt.h>
-#include <SDL3/SDL_camera.h>
 #include <SDL3/SDL_surface.h>
 
 #include "adb/adb.h"
@@ -239,6 +238,23 @@ run_monitor(void *data) {
 
 /* --- capture ------------------------------------------------------------ */
 
+void
+sc_capture_on_camera_removed(struct sc_capture *capture, SDL_CameraID id) {
+    sc_mutex_lock(&capture->mutex);
+    if (capture->camera_id == id) {
+        capture->camera_id = 0;
+    }
+    sc_mutex_unlock(&capture->mutex);
+}
+
+static bool
+sc_capture_camera_removed(struct sc_capture *capture) {
+    sc_mutex_lock(&capture->mutex);
+    bool removed = !capture->camera_id;
+    sc_mutex_unlock(&capture->mutex);
+    return removed;
+}
+
 static void
 sc_capture_log_cameras(SDL_CameraID *ids, int count) {
     if (!count) {
@@ -297,6 +313,11 @@ sc_capture_open_camera(struct sc_capture *capture, bool log_errors) {
         .framerate_denominator = 1,
     };
 
+    // Track the selected device before opening it, including during the
+    // permission wait. The event loop never closes the camera itself.
+    sc_mutex_lock(&capture->mutex);
+    capture->camera_id = id;
+    sc_mutex_unlock(&capture->mutex);
     SDL_Camera *camera = SDL_OpenCamera(id, &spec);
     if (!camera) {
         if (log_errors) {
@@ -308,6 +329,10 @@ sc_capture_open_camera(struct sc_capture *capture, bool log_errors) {
 
     sc_tick deadline = sc_tick_now() + SC_CAPTURE_PERMISSION_TIMEOUT;
     for (;;) {
+        if (sc_capture_camera_removed(capture)) {
+            SDL_CloseCamera(camera);
+            return NULL;
+        }
         SDL_CameraPermissionState state = SDL_GetCameraPermissionState(camera);
         if (state == SDL_CAMERA_PERMISSION_STATE_APPROVED) {
             break;
@@ -764,6 +789,14 @@ run_capture(void *data) {
                        ? spec.colorspace : SDL_COLORSPACE_UNKNOWN;
         }
 
+        // SDL can continue delivering blank frames after a camera is removed.
+        if (sc_capture_camera_removed(capture)) {
+            LOGW("Capture card: camera disconnected, reopening");
+            SDL_CloseCamera(camera);
+            camera = NULL;
+            continue;
+        }
+
         Uint64 timestamp;
         SDL_Surface *surface = SDL_AcquireCameraFrame(camera, &timestamp);
         if (!surface) {
@@ -888,6 +921,7 @@ sc_capture_init(struct sc_capture *capture,
     capture->serial = params->serial;
     capture->display_id = params->display_id;
     capture->stopped = false;
+    capture->camera_id = 0;
     capture->monitor_started = false;
     capture->display_size.width = 0;
     capture->display_size.height = 0;

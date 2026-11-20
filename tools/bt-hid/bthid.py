@@ -101,6 +101,7 @@ def main():
             print(f"{shown} -> {reply or 'keine Antwort'}")
             if not reply or reply.startswith("ERR"):
                 rc = 1
+                break
         if args.listen:
             read_lines(s, time.time() + args.listen, stop_on_reply=False)
         sys.exit(rc)

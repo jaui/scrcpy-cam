@@ -23,6 +23,7 @@
 
 #include <ctype.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -127,6 +128,8 @@ static esp_hid_device_config_t hid_config = {
 static esp_hidd_dev_t *s_hid_dev;
 static SemaphoreHandle_t s_out_mutex;
 static volatile bool s_connected;
+// An odd value identifies an encrypted session. A reconnect changes the value.
+static atomic_uint s_hid_session;
 static volatile int64_t s_pairing_until_us; // pairing allowed until (esp_timer)
 static int s_known_bonds;                   // bonds accepted so far
 
@@ -160,6 +163,14 @@ app_pairing_allowed(void) {
     return esp_timer_get_time() < s_pairing_until_us;
 }
 
+static void
+set_hid_ready(bool ready) {
+    unsigned session = atomic_load(&s_hid_session);
+    if ((session & 1u) != (unsigned) ready) {
+        atomic_store(&s_hid_session, session + 1);
+    }
+}
+
 void
 app_on_gap_event(struct ble_gap_event *event) {
     struct ble_gap_conn_desc desc;
@@ -172,11 +183,13 @@ app_on_gap_event(struct ble_gap_event *event) {
         }
         break;
     case BLE_GAP_EVENT_DISCONNECT:
+        set_hid_ready(false);
         s_connected = false;
         out("EVT disconnected reason=%d", event->disconnect.reason);
         break;
     case BLE_GAP_EVENT_ENC_CHANGE:
         if (event->enc_change.status != 0) {
+            set_hid_ready(false);
             out("EVT encryption_failed status=%d", event->enc_change.status);
             break;
         }
@@ -197,7 +210,10 @@ app_on_gap_event(struct ble_gap_event *event) {
             s_pairing_until_us = 0; // one pairing per PAIR command
             out("EVT paired bonds=%d", bonds);
         }
-        out("EVT ready");
+        set_hid_ready(desc.sec_state.encrypted);
+        if (desc.sec_state.encrypted) {
+            out("EVT ready");
+        }
         break;
     default:
         break;
@@ -207,35 +223,37 @@ app_on_gap_event(struct ble_gap_event *event) {
 /* --- HID reports -------------------------------------------------------- */
 
 static bool
-send_keyboard(uint8_t modifiers, uint8_t key) {
-    if (!s_connected || !s_hid_dev) {
+send_input(unsigned session, uint8_t report_id, uint8_t *report, size_t size,
+           unsigned press_ms) {
+    if (!(session & 1u) || session != atomic_load(&s_hid_session) || !s_hid_dev) {
         return false;
     }
-    uint8_t report[8] = {modifiers, 0, key, 0, 0, 0, 0, 0};
-    esp_hidd_dev_input_set(s_hid_dev, 0, RPT_ID_KEYBOARD, report,
-                           sizeof(report));
-    vTaskDelay(pdMS_TO_TICKS(KEY_PRESS_MS));
-    memset(report, 0, sizeof(report));
-    esp_hidd_dev_input_set(s_hid_dev, 0, RPT_ID_KEYBOARD, report,
-                           sizeof(report));
+    if (esp_hidd_dev_input_set(s_hid_dev, 0, report_id, report, size) != ESP_OK) {
+        return false;
+    }
+    vTaskDelay(pdMS_TO_TICKS(press_ms));
+    memset(report, 0, size);
+    if (session != atomic_load(&s_hid_session)
+            || esp_hidd_dev_input_set(s_hid_dev, 0, report_id, report, size)
+                != ESP_OK) {
+        return false;
+    }
     vTaskDelay(pdMS_TO_TICKS(KEY_RELEASE_MS));
-    return true;
+    return session == atomic_load(&s_hid_session);
+}
+
+static bool
+send_keyboard(unsigned session, uint8_t modifiers, uint8_t key) {
+    uint8_t report[8] = {modifiers, 0, key, 0, 0, 0, 0, 0};
+    return send_input(session, RPT_ID_KEYBOARD, report, sizeof(report),
+                      KEY_PRESS_MS);
 }
 
 static bool
 send_consumer(uint16_t usage) {
-    if (!s_connected || !s_hid_dev) {
-        return false;
-    }
     uint8_t report[2] = {usage & 0xFF, usage >> 8};
-    esp_hidd_dev_input_set(s_hid_dev, 0, RPT_ID_CONSUMER, report,
-                           sizeof(report));
-    vTaskDelay(pdMS_TO_TICKS(KEY_PRESS_MS * 2));
-    report[0] = report[1] = 0;
-    esp_hidd_dev_input_set(s_hid_dev, 0, RPT_ID_CONSUMER, report,
-                           sizeof(report));
-    vTaskDelay(pdMS_TO_TICKS(KEY_RELEASE_MS));
-    return true;
+    return send_input(atomic_load(&s_hid_session), RPT_ID_CONSUMER, report,
+                      sizeof(report), KEY_PRESS_MS * 2);
 }
 
 #define MOD_CTRL 0x01
@@ -381,8 +399,9 @@ handle_line(char *line) {
         s_known_bonds = 0;
         out(rc ? "ERR could not clear bonds" : "OK");
     } else if (!strcasecmp(line, "TYPE")) {
-        if (!s_connected) {
-            out("ERR not connected");
+        unsigned session = atomic_load(&s_hid_session);
+        if (!(session & 1u)) {
+            out("ERR HID not ready");
             return;
         }
         for (const char *p = arg; *p; ++p) {
@@ -391,7 +410,10 @@ handle_line(char *line) {
                 out("ERR cannot type character 0x%02x", (unsigned char) *p);
                 return;
             }
-            send_keyboard(mod, key);
+            if (!send_keyboard(session, mod, key)) {
+                out("ERR keyboard report failed");
+                return;
+            }
         }
         out("OK");
     } else if (!strcasecmp(line, "KEY")) {
@@ -400,13 +422,14 @@ handle_line(char *line) {
             out("ERR unknown key");
             return;
         }
-        out(send_keyboard(mod, key) ? "OK" : "ERR not connected");
+        out(send_keyboard(atomic_load(&s_hid_session), mod, key)
+                ? "OK" : "ERR keyboard report failed");
     } else if (!strcasecmp(line, "CC")) {
         for (size_t i = 0; i < sizeof(consumer_names) / sizeof(consumer_names[0]);
                 ++i) {
             if (!strcasecmp(arg, consumer_names[i].name)) {
                 out(send_consumer(consumer_names[i].usage)
-                        ? "OK" : "ERR not connected");
+                        ? "OK" : "ERR consumer report failed");
                 return;
             }
         }

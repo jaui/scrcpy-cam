@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <SDL3/SDL_camera.h>
 
 #include "capture_geometry.h"
 #include "coords.h"
@@ -49,6 +50,7 @@ struct sc_capture {
     sc_mutex mutex;
     sc_cond cond;
     bool stopped; // protected by mutex
+    SDL_CameraID camera_id; // protected by mutex, 0 once removed
 
     // current size of the controlled display (0 if unknown)
     struct sc_size display_size; // protected by mutex
@@ -76,6 +78,9 @@ sc_capture_init(struct sc_capture *capture,
 
 bool
 sc_capture_start(struct sc_capture *capture);
+
+void
+sc_capture_on_camera_removed(struct sc_capture *capture, SDL_CameraID id);
 
 void
 sc_capture_stop(struct sc_capture *capture);
