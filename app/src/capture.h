@@ -51,6 +51,7 @@ struct sc_capture {
     sc_cond cond;
     bool stopped; // protected by mutex
     SDL_CameraID camera_id; // protected by mutex, 0 once removed
+    bool rescan_pending; // protected by mutex, see sc_capture_rescan_cameras()
 
     // current size of the controlled display (0 if unknown)
     struct sc_size display_size; // protected by mutex
@@ -81,6 +82,10 @@ sc_capture_start(struct sc_capture *capture);
 
 void
 sc_capture_on_camera_removed(struct sc_capture *capture, SDL_CameraID id);
+
+// Must be called from the main thread on SC_EVENT_CAPTURE_RESCAN
+void
+sc_capture_rescan_cameras(struct sc_capture *capture);
 
 void
 sc_capture_stop(struct sc_capture *capture);

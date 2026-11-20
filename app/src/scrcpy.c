@@ -154,6 +154,11 @@ event_loop(struct scrcpy *s, bool has_screen, bool capture_started) {
                                                  event.cdevice.which);
                 }
                 break;
+            case SC_EVENT_CAPTURE_RESCAN:
+                if (capture_started) {
+                    sc_capture_rescan_cameras(&s->capture);
+                }
+                break;
             case SC_EVENT_TIME_LIMIT_REACHED:
                 LOGI("Time limit reached");
                 return SCRCPY_EXIT_SUCCESS;

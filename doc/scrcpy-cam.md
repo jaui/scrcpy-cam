@@ -321,8 +321,11 @@ git push --force-with-lease origin main
    `sc_frame_source_sinks_push_session` und Frames in neuer Größe; das Fenster passt sich an.
 5. Der Bildschirm (`screen.c`) schaltet bei `YUV420P` automatisch auf die Software-Ausgabe
    (`interop_software`) um.
-6. Kommen 3 s lang keine Frames (Karte abgezogen), wird die Kamera geschlossen und jede Sekunde
-   neu geöffnet. Das Fenster bleibt offen. *Noch nicht mit echtem Abziehen getestet.*
+6. Wird die Karte abgezogen (SDL-Ereignis `SDL_EVENT_CAMERA_DEVICE_REMOVED`) oder kommen 3 s lang
+   keine Frames, wird die Kamera geschlossen und jede Sekunde neu geöffnet. Das Fenster bleibt offen.
+   Weil SDL unter Windows Kameras nur beim Start des Kamera-Subsystems erkennt, startet der
+   Hauptthread das Subsystem neu (höchstens alle 3 s), solange die Karte fehlt; der Capture-Thread
+   wartet so lange. *Getestet: abziehen und wieder einstecken, Bild kommt zurück.*
 7. Schlägt das Weitergeben eines Frames fehl, meldet der Thread `SC_EVENT_CAPTURE_ERROR`:
    scrcpy endet mit Code 1 (der Launcher startet neu), statt mit eingefrorenem Bild
    weiterzulaufen.
@@ -474,13 +477,19 @@ Nicht getestet: vollständiger Login mit Freigabe per Authenticator (keine Zugan
 | 8 | `--capture-card-fps=30` ohne `--capture-card` | Fehlermeldung (vorher bei Standardwert still akzeptiert) |
 | 9 | CPU-Vergleich | siehe [Leistung und Bildschirm](#leistung-und-bildschirm) |
 
+### 20.11.2026 – Testgerät B, Capture-Karte abziehen/einstecken
+
+| Test | Ergebnis |
+|---|---|
+| UGREEN-USB abziehen, ≈ 5 s warten, wieder einstecken (scrcpy läuft) | erster Build: Abziehen erkannt, Karte danach aber nie wieder gefunden (Bild bleibt schwarz) – SDL 3.4 enumeriert unter Windows (Media Foundation) Kameras nur beim Start des Kamera-Subsystems („no hotplug“). Mit Neu-Einlesen (Kamera-Subsystem im Hauptthread neu starten, höchstens alle 3 s, solange die Karte fehlt): **Bild kommt zurück** |
+
 Hinweis zu Tests: Ein `SetForegroundWindow` aus einem Hintergrundprozess wird von Windows oft
 verweigert. Simulierte Tastendrücke landen dann im falschen Fenster. Mausklicks auf
 Bildschirmkoordinaten sind zuverlässiger.
 
 ### Offen
 
-- UGREEN-USB abziehen/einstecken → Bild kommt zurück
+- scrcpy starten, bevor die Capture-Karte eingesteckt ist (sollte durch das Neu-Einlesen ebenfalls gehen)
 - DeX: `--display-id=<DeX-ID>`, 1:1-Abbildung
 - MOD+r (Handy drehen)
 - Vollständiger Login mit Freigabe per Authenticator

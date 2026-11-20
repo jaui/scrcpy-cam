@@ -23,6 +23,7 @@ enum {
     SC_EVENT_DISCONNECTED_ICON_LOADED,
     SC_EVENT_DISCONNECTED_TIMEOUT,
     SC_EVENT_CAPTURE_ERROR, // scrcpy-cam: --capture-card
+    SC_EVENT_CAPTURE_RESCAN, // scrcpy-cam: re-enumerate cameras (main thread)
 };
 
 bool

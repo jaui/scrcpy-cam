@@ -42,6 +42,9 @@
     SC_CAPTURE_DISPLAY_CMD "; echo .; sleep 1; done"
 
 #define SC_CAPTURE_RETRY_INTERVAL SC_TICK_FROM_MS(1000)
+// Re-enumerate cameras at most this often while the card is missing
+#define SC_CAPTURE_RESCAN_INTERVAL SC_TICK_FROM_MS(3000)
+#define SC_CAPTURE_RESCAN_TIMEOUT SC_TICK_FROM_MS(5000)
 // Polling interval once the next frame is due (SDL has no frame event).
 // At 30 fps (33 ms per frame), 4 ms adds at most ~2 ms of latency on average.
 #define SC_CAPTURE_POLL_INTERVAL SC_TICK_FROM_MS(4)
@@ -253,6 +256,55 @@ sc_capture_camera_removed(struct sc_capture *capture) {
     bool removed = !capture->camera_id;
     sc_mutex_unlock(&capture->mutex);
     return removed;
+}
+
+/*
+ * SDL's Media Foundation backend enumerates cameras only when the camera
+ * subsystem is initialized ("no hotplug", SDL 3.4): a capture card plugged in
+ * later never appears in SDL_GetCameras(). Restarting the subsystem
+ * re-enumerates. It is done on the main thread while the capture thread waits
+ * (it holds no camera at that point), so SDL_GetCameras() never races with it.
+ */
+void
+sc_capture_rescan_cameras(struct sc_capture *capture) {
+    SDL_QuitSubSystem(SDL_INIT_CAMERA);
+    if (!SDL_InitSubSystem(SDL_INIT_CAMERA)) {
+        LOGW("Capture card: could not reinitialize SDL camera: %s",
+             SDL_GetError());
+    }
+
+    sc_mutex_lock(&capture->mutex);
+    capture->rescan_pending = false;
+    // The display monitor thread waits on the same condition variable
+    sc_cond_broadcast(&capture->cond);
+    sc_mutex_unlock(&capture->mutex);
+}
+
+// Ask the main thread to re-enumerate cameras and wait until it is done.
+// Return false if stopped.
+static bool
+sc_capture_request_rescan(struct sc_capture *capture) {
+    sc_mutex_lock(&capture->mutex);
+    capture->rescan_pending = true;
+    sc_mutex_unlock(&capture->mutex);
+
+    if (!sc_push_event(SC_EVENT_CAPTURE_RESCAN)) {
+        sc_mutex_lock(&capture->mutex);
+        capture->rescan_pending = false;
+        sc_mutex_unlock(&capture->mutex);
+        return !sc_capture_is_stopped(capture);
+    }
+
+    sc_tick deadline = sc_tick_now() + SC_CAPTURE_RESCAN_TIMEOUT;
+    sc_mutex_lock(&capture->mutex);
+    while (capture->rescan_pending && !capture->stopped) {
+        if (!sc_cond_timedwait(&capture->cond, &capture->mutex, deadline)) {
+            break; // timeout: the main thread is busy, try again later
+        }
+    }
+    bool stopped = capture->stopped;
+    sc_mutex_unlock(&capture->mutex);
+    return !stopped;
 }
 
 static void
@@ -756,6 +808,8 @@ run_capture(void *data) {
     SDL_Colorspace colorspace = SDL_COLORSPACE_UNKNOWN;
     sc_tick last_frame = 0;
     sc_tick frame_period = 0;
+    // The first failed open does not rescan: SDL has just enumerated
+    sc_tick last_rescan = sc_tick_now();
     bool log_open_errors = true;
     struct sc_capture_pool pool = {NULL, {0, 0}};
     struct sc_capture_prev prev = {0};
@@ -773,7 +827,17 @@ run_capture(void *data) {
             if (!camera) {
                 // Log only once until the camera is found
                 log_open_errors = false;
-                sc_tick deadline = sc_tick_now() + SC_CAPTURE_RETRY_INTERVAL;
+                sc_tick now = sc_tick_now();
+                if (now - last_rescan >= SC_CAPTURE_RESCAN_INTERVAL) {
+                    // The card may have been plugged in (again): SDL only
+                    // sees it after re-enumerating
+                    last_rescan = now;
+                    if (!sc_capture_request_rescan(capture)) {
+                        break;
+                    }
+                    continue;
+                }
+                sc_tick deadline = now + SC_CAPTURE_RETRY_INTERVAL;
                 if (!sc_capture_wait(capture, deadline)) {
                     break;
                 }
@@ -922,6 +986,7 @@ sc_capture_init(struct sc_capture *capture,
     capture->display_id = params->display_id;
     capture->stopped = false;
     capture->camera_id = 0;
+    capture->rescan_pending = false;
     capture->monitor_started = false;
     capture->display_size.width = 0;
     capture->display_size.height = 0;
