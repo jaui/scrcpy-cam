@@ -118,6 +118,9 @@ python bthid.py "KEY ENTER" "SLEEP 1" "TYPE -" "KEY ENTER"
 - Kopplung nur im Kopplungsfenster; „Just Works“-Pairing mit Bonding und LE Secure Connections.
   Während das Fenster offen ist, könnte sich ein anderes Gerät in Funkreichweite koppeln –
   deshalb kurz halten und mit `STATUS` (`bonds=`) prüfen.
+- Tastendrücke gehen nur an eine **verschlüsselte und gebondete** Verbindung. Außerhalb des
+  Kopplungsfensters trennt der ESP32 jedes Gerät, das ohne Bonding koppelt (`EVT pairing_rejected`),
+  damit eine PIN nie an ein fremdes Gerät getippt wird.
 - Die PIN nicht in Skripten oder Dateien speichern; `TYPE -` verwenden.
 
 ## Quellen

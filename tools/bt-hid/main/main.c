@@ -209,8 +209,15 @@ app_on_gap_event(struct ble_gap_event *event) {
             s_known_bonds = bonds;
             s_pairing_until_us = 0; // one pairing per PAIR command
             out("EVT paired bonds=%d", bonds);
+        } else if (!desc.sec_state.bonded && !app_pairing_allowed()) {
+            // Encrypted but not bonded: the peer paired without bonding, so
+            // the bond count did not change. Outside the pairing window only
+            // bonded peers may receive keystrokes (they may carry a PIN).
+            out("EVT pairing_rejected (not bonded)");
+            ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_AUTH_FAIL);
+            break;
         }
-        set_hid_ready(desc.sec_state.encrypted);
+        set_hid_ready(desc.sec_state.encrypted && desc.sec_state.bonded);
         if (desc.sec_state.encrypted) {
             out("EVT ready");
         }
