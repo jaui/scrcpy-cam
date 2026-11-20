@@ -150,7 +150,9 @@ Zusätzlich reagiert sie sofort auf den Wechsel des Access Points statt auf ein 
 
 | Kachel hinzufügen, aus/an | ✅ aus trennt adb, an startet Wireless Debugging neu (neuer Port), adb per mDNS wieder verbunden |
 
-Noch offen: WLAN aus/an und Neustart auf Testgerät B; Wechsel zwischen Mesh-Access-Points.
+| WLAN aus → an | ✅ Wireless Debugging kommt von selbst zurück (neuer Port, per mDNS erreichbar) |
+
+Noch offen: Neustart auf Testgerät B; Wechsel zwischen Mesh-Access-Points.
 
 ## Aufbau
 
