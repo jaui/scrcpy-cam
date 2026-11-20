@@ -148,7 +148,9 @@ Zusätzlich reagiert sie sofort auf den Wechsel des Access Points statt auf ein 
 | `build.ps1 -Install` | ✅ Recht erteilt, Akku-Ausnahme (Standby-Bucket „exempted“), Start ok |
 | `adb_wifi_enabled=0` per adb (trennt adb) | ✅ Job lief ≈ 0,5 s danach; Wireless Debugging neu gestartet (neuer Port), adb über denselben mDNS-Namen binnen ≈ 2 s wieder verbunden |
 
-Noch offen: Kachel, WLAN aus/an und Neustart auf Testgerät B; Wechsel zwischen Mesh-Access-Points.
+| Kachel hinzufügen, aus/an | ✅ aus trennt adb, an startet Wireless Debugging neu (neuer Port), adb per mDNS wieder verbunden |
+
+Noch offen: WLAN aus/an und Neustart auf Testgerät B; Wechsel zwischen Mesh-Access-Points.
 
 ## Aufbau
 
