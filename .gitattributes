@@ -2,3 +2,6 @@
 *.sh text eol=lf
 release/build_common text eol=lf
 cross_*.txt text eol=lf
+# Windows batch files: CRLF (cmd.exe)
+*.cmd text eol=crlf
+*.bat text eol=crlf

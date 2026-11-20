@@ -214,6 +214,30 @@ Text wird normal getippt.
 
 Einschränkung: Während des Neustarts (1–3 s) verschwindet das Fenster kurz.
 
+Der Build legt `scrcpy-cam.ps1` und `scrcpy-usb.cmd` mit in den Ausgabeordner; dort finden beide
+`scrcpy.exe` direkt daneben. Der Ordner lässt sich so als Ganzes auf den Ziel-PC kopieren.
+
+### Notbetrieb ohne Capture-Karte
+
+Fällt die Capture-Karte oder der HDMI-Hub aus, lässt sich das Handy wie mit normalem scrcpy
+weiterbedienen: Ohne `--capture-card` ist `scrcpy.exe` unverändertes scrcpy 5.0.1 (Videostrom vom
+Handy), mit dem offiziellen Server.
+
+1. Launcher bzw. scrcpy-cam beenden.
+2. Hub vom Handy abziehen, Handy per USB-Kabel direkt an den PC.
+3. Am Handy **USB-Debugging** einschalten (Entwickleroptionen; für den WLAN-Betrieb nicht nötig)
+   und beim ersten Anschluss „USB-Debugging zulassen?“ bestätigen.
+4. [`tools/scrcpy-usb.cmd`](../tools/scrcpy-usb.cmd) starten (im Ausgabeordner neben
+   `scrcpy.exe`). Es ruft `scrcpy.exe -d` auf (`-d` = per USB angeschlossenes Gerät, auch wenn es
+   zusätzlich per WLAN verbunden ist); weitere Argumente werden durchgereicht, z. B.
+   `scrcpy-usb.cmd --fullscreen`.
+
+**Einschränkung:** Apps mit `FLAG_SECURE` (Banking, Authenticator) sind im Notbetrieb schwarz –
+genau wie bei normalem scrcpy. Für diese Apps braucht es die Capture-Karte.
+
+Hinweis: Solange am Handy HDMI bzw. DeX aktiv ist, lieferte auf Testgerät B auch das offizielle
+scrcpy 5.0.1 keine Bilder (0 fps). Im Notbetrieb hängt kein HDMI am Handy.
+
 ## 8. WLAN-ADB ohne Eingriff am Handy
 
 Ausführliche Checkliste: [`tools/SETUP-PHONE.md`](../tools/SETUP-PHONE.md).

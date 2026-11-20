@@ -36,4 +36,6 @@ DIST=/build/release/work/build-win64/dist
 mkdir -p /out/scrcpy-cam-win64
 find /out/scrcpy-cam-win64 -mindepth 1 -delete
 cp -r "$DIST"/. /out/scrcpy-cam-win64/
+# Launcher and emergency script next to scrcpy.exe: the folder is self-contained
+cp tools/scrcpy-cam.ps1 tools/scrcpy-usb.cmd /out/scrcpy-cam-win64/
 echo "Fertig: /out/scrcpy-cam-win64"

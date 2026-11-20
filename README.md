@@ -19,6 +19,8 @@
 >
 > Dauerbetrieb: `tools/scrcpy-cam.ps1 -ScrcpyArgs '--fullscreen'` verbindet nach WLAN-Abbruch
 > oder Portwechsel selbst neu (mDNS) und startet scrcpy neu; Fenster schließen beendet den Launcher.
+> Notbetrieb ohne Capture-Karte (Defekt): Handy per USB anschließen, `tools/scrcpy-usb.cmd` –
+> normales scrcpy, Apps mit `FLAG_SECURE` sind dann schwarz.
 >
 > **Vollständige Dokumentation: [`doc/scrcpy-cam.md`](doc/scrcpy-cam.md)** (Aufbau, Optionen,
 > Bedienung, Bauen, Interna, Entscheidungen, Testprotokoll, Fehlersuche).

@@ -14,7 +14,8 @@
     - laeuft mit Windows PowerShell 5.1 und PowerShell 7
 
 .PARAMETER ScrcpyDir
-    Ordner mit scrcpy.exe, adb.exe und scrcpy-server.
+    Ordner mit scrcpy.exe, adb.exe und scrcpy-server. Standard: der Ordner dieses Skripts,
+    falls dort scrcpy.exe liegt (Ausgabeordner), sonst ..\..\dist\scrcpy-cam-win64.
 
 .PARAMETER Serial
     Optional: Teil der adb-Seriennummer bzw. des mDNS-Namens (z. B. "R5CX..." aus "adb devices"), falls
@@ -27,7 +28,8 @@
     .\scrcpy-cam.ps1 -ScrcpyDir C:\dev\scrcpy-cam\dist\scrcpy-cam-win64 -ScrcpyArgs '--fullscreen'
 #>
 param(
-    [string]$ScrcpyDir = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'dist\scrcpy-cam-win64'),
+    # Standard: neben diesem Skript (Ausgabeordner), sonst ..\..\dist\scrcpy-cam-win64
+    [string]$ScrcpyDir = '',
     [string]$Serial = '',
     [string[]]$ScrcpyArgs = @(),
     [int]$RetrySeconds = 2,
@@ -37,6 +39,10 @@ param(
 # Nicht 'Stop': unter Windows PowerShell 5.1 wird jede umgeleitete stderr-Zeile von adb
 # (z. B. "* daemon not running; starting now") sonst zum abbrechenden Fehler.
 $ErrorActionPreference = 'Continue'
+if (-not $ScrcpyDir) {
+    $ScrcpyDir = if (Test-Path (Join-Path $PSScriptRoot 'scrcpy.exe')) { $PSScriptRoot }
+                 else { Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'dist\scrcpy-cam-win64' }
+}
 $ScrcpyDir = (Resolve-Path -LiteralPath $ScrcpyDir -ErrorAction Stop).Path
 $adb = Join-Path $ScrcpyDir 'adb.exe'
 $scrcpy = Join-Path $ScrcpyDir 'scrcpy.exe'
