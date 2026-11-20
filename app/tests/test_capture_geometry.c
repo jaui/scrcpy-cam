@@ -106,6 +106,45 @@ static void test_parse_display(void) {
     assert(size.width == 2400 && size.height == 1080 && rot == 1);
 }
 
+static void test_select_display(void) {
+    // only the built-in display
+    assert(sc_capture_geometry_select_display(
+        "0 1080 2340 0 INTERNAL\ndex 0\n") == 0);
+    // mirror mode: the HDMI display is listed as EXTERNAL, but DeX is off
+    assert(sc_capture_geometry_select_display(
+        "0 1080 2340 0 INTERNAL\r\n9 1920 1080 0 EXTERNAL\r\ndex 0\r\n") == 0);
+    // DeX on HDMI
+    assert(sc_capture_geometry_select_display(
+        "0 1080 2340 0 INTERNAL\r\n9 1920 1080 0 EXTERNAL\r\ndex 1\r\n") == 9);
+    assert(sc_capture_geometry_select_display(
+        "0 1080 2340 0 INTERNAL\n9 1920 1080 0 EXTERNAL\ndex 1") == 9);
+    // other devices: no DeX setting
+    assert(sc_capture_geometry_select_display(
+        "0 1080 2340 0 INTERNAL\n9 1920 1080 0 EXTERNAL\ndex null\n") == 0);
+    assert(sc_capture_geometry_select_display(
+        "0 1080 2340 0 INTERNAL\n9 1920 1080 0 EXTERNAL\ndex 10\n") == 0);
+    // the parser of the display size still accepts the extra token
+    struct sc_size size;
+    unsigned rot;
+    assert(sc_capture_geometry_parse_display("9 1920 1080 0 EXTERNAL\n", 9,
+                                             &size, &rot));
+    assert(size.width == 1920 && size.height == 1080 && rot == 0);
+    // ambiguous: two external displays -> built-in
+    assert(sc_capture_geometry_select_display(
+        "0 1080 2340 0 INTERNAL\n9 1920 1080 0 EXTERNAL\n"
+        "11 1280 720 0 EXTERNAL\ndex 1\n") == 0);
+    // virtual displays (screen recording, casting) are ignored
+    assert(sc_capture_geometry_select_display(
+        "0 1080 2340 0 INTERNAL\n5 720 1280 0 VIRTUAL\ndex 1\n") == 0);
+    // older format without the type
+    assert(sc_capture_geometry_select_display(
+        "0 1080 2340 0\n2 1920 1080 0\ndex 1\n") == 0);
+    // the "dex" line is ignored by the size parser
+    assert(sc_capture_geometry_parse_display("dex 1\n0 1080 2340 0\n", 0,
+                                             &size, &rot));
+    assert(sc_capture_geometry_select_display("") == 0);
+}
+
 int main(int argc, char *argv[]) {
     (void) argc;
     (void) argv;
@@ -118,6 +157,7 @@ int main(int argc, char *argv[]) {
     test_map();
     test_parse_crop();
     test_parse_display();
+    test_select_display();
     printf("test_capture_geometry: OK\n");
     return 0;
 }

@@ -159,6 +159,8 @@ event_loop(struct scrcpy *s, bool has_screen, bool capture_started) {
                     sc_capture_rescan_cameras(&s->capture);
                 }
                 break;
+            case SC_EVENT_CAPTURE_DISPLAY_CHANGED:
+                return SCRCPY_EXIT_DISPLAY_CHANGED;
             case SC_EVENT_TIME_LIMIT_REACHED:
                 LOGI("Time limit reached");
                 return SCRCPY_EXIT_SUCCESS;
@@ -469,6 +471,8 @@ scrcpy(struct scrcpy_options *options) {
         .capture_orientation_lock = options->capture_orientation_lock,
         .control = options->control,
         .display_id = options->display_id,
+        // scrcpy-cam: without --display-id, control DeX if it is on
+        .display_auto = options->capture_card && !options->display_id_set,
         .new_display = options->new_display,
         .display_ime_policy = options->display_ime_policy,
         .video = options->video,
@@ -999,7 +1003,9 @@ aoa_complete:
             .fps = options->capture_card_fps,
             .crop = options->capture_card_crop,
             .serial = serial,
-            .display_id = options->display_id,
+            // possibly chosen automatically by the server thread (DeX)
+            .display_id = s->server.params.display_id,
+            .display_auto = s->server.params.display_auto,
         };
         if (!sc_capture_init(&s->capture, &capture_params)) {
             goto end;

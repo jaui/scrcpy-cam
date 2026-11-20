@@ -66,4 +66,15 @@ bool
 sc_capture_geometry_parse_display(const char *output, uint32_t display_id,
                                   struct sc_size *size, unsigned *rotation);
 
+/**
+ * Select the display to control automatically from lines
+ * "<display_id> <width> <height> <rotation> [<type>]" and "dex <value>".
+ *
+ * Return the id of the external display if Samsung DeX runs on it ("dex 1")
+ * and there is exactly one, otherwise 0 (the built-in display, mirrored on
+ * HDMI; the HDMI display is also listed as EXTERNAL while mirroring).
+ */
+uint32_t
+sc_capture_geometry_select_display(const char *output);
+
 #endif

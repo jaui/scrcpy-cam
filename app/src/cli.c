@@ -341,7 +341,12 @@ static const struct sc_option options[] = {
                 "The capture device is the first camera whose name contains "
                 "<name> (case-insensitive). Default is \"UGREEN\".\n"
                 "The black borders are removed automatically, according to the "
-                "current size of the controlled display (--display-id).",
+                "current size of the controlled display (--display-id).\n"
+                "Without --display-id, the external display is controlled if "
+                "Samsung DeX runs on it, otherwise the built-in display "
+                "(mirrored on HDMI). If this changes while running (DeX switched "
+                "on or off), scrcpy exits with code 3 so that the launcher "
+                "(tools/scrcpy-cam.ps1) restarts it.",
     },
     {
         .longopt_id = OPT_CAPTURE_CARD_CROP,
@@ -2661,6 +2666,7 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
                 if (!parse_display_id(optarg, &opts->display_id)) {
                     return false;
                 }
+                opts->display_id_set = true;
                 break;
             case 'd':
                 opts->select_usb = true;

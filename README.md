@@ -5,9 +5,10 @@
 > USB-Capture-Karte (UGREEN 25772), die Steuerung über den unveränderten scrcpy-Server per ADB/WLAN.
 >
 > ```
-> scrcpy --capture-card                 # Kamera mit "UGREEN" im Namen, steuert Display 0
+> scrcpy --capture-card                 # Kamera mit "UGREEN" im Namen; steuert Display 0,
+>                                       # bei Samsung DeX automatisch das DeX-Display
 > scrcpy --capture-card="USB Video"     # andere Capture-Karte (Teil des Namens)
-> scrcpy --capture-card --display-id=2  # z. B. DeX-Display steuern
+> scrcpy --capture-card --display-id=0  # immer Display 0 (keine DeX-Automatik)
 > ```
 >
 > Weitere Optionen: `--capture-card-size=1920x1080`, `--capture-card-fps=30` (Standard; 60 = flüssiger, doppelte CPU-Last),

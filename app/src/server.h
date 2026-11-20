@@ -51,6 +51,9 @@ struct sc_server_params {
     enum sc_orientation_lock capture_orientation_lock;
     bool control;
     uint32_t display_id;
+    // scrcpy-cam: replace display_id by the external display (DeX), if any,
+    // once the device is selected
+    bool display_auto;
     const char *new_display;
     enum sc_display_ime_policy display_ime_policy;
     bool video;

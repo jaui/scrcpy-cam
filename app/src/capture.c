@@ -16,8 +16,13 @@
 #include "util/process_intr.h"
 #include "util/tick.h"
 
-// Logical size and rotation of every display, one line per display:
-//   "<display_id> <width> <height> <rotation>"
+// Logical size, rotation and type of every display, one line per display:
+//   "<display_id> <width> <height> <rotation> [<type>]"
+// (type: INTERNAL, EXTERNAL, VIRTUAL...; it follows the rotation in
+// DisplayInfo.toString(); without it the line ends after the rotation)
+// followed by "dex <value>": the Samsung setting dex_on_external_display (1 if
+// DeX runs on the external display, "null" on other devices). It is needed
+// because the HDMI display also exists, as EXTERNAL, while mirroring.
 //
 // "cmd display get-displays" is about 3x cheaper on the device than
 // "dumpsys display" (which dumps ~400 KB of text on recent devices); fall back
@@ -25,8 +30,11 @@
 #define SC_CAPTURE_DISPLAY_CMD \
     "{ cmd display get-displays 2>/dev/null | grep 'DisplayInfo{' " \
     "|| dumpsys display | grep mOverrideDisplayInfo; } | sed -E " \
-    "'s/.*displayId ([0-9]+).* real ([0-9]+) x ([0-9]+).* rotation " \
-    "([0-9]).*/\\1 \\2 \\3 \\4/'"
+    "-e 's/.*displayId ([0-9]+).* real ([0-9]+) x ([0-9]+).* rotation " \
+    "([0-9])(.*)/\\1 \\2 \\3 \\4\\5/' " \
+    "-e 's/^([0-9]+ [0-9]+ [0-9]+ [0-9]).*, type ([A-Z_]+).*/\\1 \\2/' " \
+    "-e 's/^([0-9]+ [0-9]+ [0-9]+ [0-9])[^0-9 ].*/\\1/'; " \
+    "echo \"dex $(settings get system dex_on_external_display 2>/dev/null)\""
 
 // The same command in a loop, in a single long-lived "adb shell" process
 // (instead of starting a new adb process every second). Each result block is
@@ -108,6 +116,24 @@ sc_capture_is_stopped(struct sc_capture *capture) {
 // Parse the output of SC_CAPTURE_DISPLAY_CMD and store the display size
 static bool
 sc_capture_apply_display(struct sc_capture *capture, const char *output) {
+    if (capture->display_auto && !capture->display_change_reported) {
+        // DeX switched on or off: the server controls a fixed display, so
+        // scrcpy must be restarted (by the launcher) to follow. Require two
+        // consecutive polls to ignore transient states while switching.
+        uint32_t selected = sc_capture_geometry_select_display(output);
+        if (selected != capture->display_id) {
+            if (++capture->display_mismatch >= 2) {
+                capture->display_change_reported = true;
+                LOGI("Capture card: display to control changed (%" PRIu32
+                     " -> %" PRIu32 "), restarting", capture->display_id,
+                     selected);
+                sc_push_event(SC_EVENT_CAPTURE_DISPLAY_CHANGED);
+            }
+        } else {
+            capture->display_mismatch = 0;
+        }
+    }
+
     struct sc_size size;
     unsigned rotation;
     bool found = sc_capture_geometry_parse_display(output, capture->display_id,
@@ -130,6 +156,21 @@ sc_capture_apply_display(struct sc_capture *capture, const char *output) {
              rotation * 90);
     }
 
+    return true;
+}
+
+bool
+sc_capture_detect_display(struct sc_intr *intr, const char *serial,
+                          uint32_t *display_id) {
+    char buf[2048];
+    ssize_t r = sc_adb_shell_read(intr, serial, SC_CAPTURE_DISPLAY_CMD, buf,
+                                  sizeof(buf),
+                                  SC_ADB_NO_STDERR | SC_ADB_NO_LOGERR);
+    if (r < 0) {
+        return false;
+    }
+
+    *display_id = sc_capture_geometry_select_display(buf);
     return true;
 }
 
@@ -984,6 +1025,9 @@ sc_capture_init(struct sc_capture *capture,
     capture->req_fps = params->fps;
     capture->serial = params->serial;
     capture->display_id = params->display_id;
+    capture->display_auto = params->display_auto;
+    capture->display_mismatch = 0;
+    capture->display_change_reported = false;
     capture->stopped = false;
     capture->camera_id = 0;
     capture->rescan_pending = false;

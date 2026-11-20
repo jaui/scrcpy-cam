@@ -71,6 +71,7 @@ const struct scrcpy_options scrcpy_options_default = {
     .window_width = 0,
     .window_height = 0,
     .display_id = 0,
+    .display_id_set = false,
     .background_color = 0x222222, // dark gray
     .video_buffer = 0,
     .audio_buffer = -1, // depends on the audio format,

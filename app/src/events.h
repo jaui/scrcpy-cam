@@ -24,6 +24,7 @@ enum {
     SC_EVENT_DISCONNECTED_TIMEOUT,
     SC_EVENT_CAPTURE_ERROR, // scrcpy-cam: --capture-card
     SC_EVENT_CAPTURE_RESCAN, // scrcpy-cam: re-enumerate cameras (main thread)
+    SC_EVENT_CAPTURE_DISPLAY_CHANGED, // scrcpy-cam: DeX switched on/off
 };
 
 bool

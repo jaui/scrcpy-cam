@@ -81,7 +81,7 @@ Neue Optionen (alle übrigen scrcpy-Optionen gelten weiter, siehe `scrcpy --help
 | `--capture-card-size=BxH` | `1920x1080` | Angeforderte Auflösung der Karte (gerade Werte). |
 | `--capture-card-fps=N` | `30` | Angeforderte Bildrate. 30 fps braucht etwa halb so viel CPU wie 60 fps (siehe [Leistung](#leistung-und-bildschirm)). |
 | `--capture-card-crop=B:H:X:Y` | automatisch | Fester Bildausschnitt statt automatischer Randerkennung. |
-| `--display-id=N` | `0` | Welches Android-Display gesteuert wird (scrcpy-Standardoption). Im Spiegelmodus `0`. |
+| `--display-id=N` | automatisch | Welches Android-Display gesteuert wird (scrcpy-Standardoption). Ohne Angabe: das DeX-Display, wenn Samsung DeX auf HDMI läuft, sonst `0` (Spiegelmodus); wechselt das während des Betriebs, endet scrcpy mit Code 3 und der Launcher startet es neu. Mit Angabe (auch `--display-id=0`) keine Automatik. |
 
 Nicht kombinierbar mit `--capture-card` (Fehlermeldung beim Start): `--no-window`,
 `--no-control`, `--otg`, `--video-source=camera`, `--record`, `--new-display`,
@@ -90,9 +90,9 @@ Nicht kombinierbar mit `--capture-card` (Fehlermeldung beim Start): `--no-window
 Beispiele:
 
 ```powershell
-scrcpy --capture-card                          # UGREEN, Display 0
+scrcpy --capture-card                          # UGREEN, Display 0 bzw. DeX-Display automatisch
 scrcpy --capture-card="USB Video"              # andere Karte
-scrcpy --capture-card --display-id=2           # z. B. DeX-Display
+scrcpy --capture-card --display-id=0           # immer Display 0, keine DeX-Automatik
 scrcpy --capture-card --capture-card-crop=1920:1080:0:0   # ganzer Frame (z. B. DeX)
 scrcpy --capture-card --print-fps              # Bildrate im Terminal anzeigen
 scrcpy --capture-card --capture-card-fps=60    # flüssiger, doppelte CPU-Last
@@ -206,6 +206,8 @@ Text wird normal getippt.
   Verbindungsverlust (Code 2), wird nach `RetrySeconds` neu verbunden und neu gestartet.
 - Scheitert der Start dreimal hintereinander nach weniger als 15 s (z. B. falsches Argument),
   verdoppelt sich der Abstand bis `MaxRetrySeconds` (2, 4, 8 … 60 s) statt endlos alle 2 s.
+- Wird Samsung DeX ein- oder ausgeschaltet, endet scrcpy mit Code 3; der Launcher startet es
+  sofort neu (ohne Wartezeit), und es steuert dann das DeX- bzw. das Handy-Display.
 - Endet scrcpy normal (Code 0, Fenster geschlossen), endet auch der Launcher.
 - Standard für `-ScrcpyDir`: `..\..\dist\scrcpy-cam-win64` relativ zum Skript, also
   `C:\dev\scrcpy-cam\dist\scrcpy-cam-win64`.
@@ -411,7 +413,7 @@ Maus-Linksklicks mit Pointer-ID „Maus“ spritzt der Server als **Finger** ein
 | Pixelformat | NV12 anfordern, selbst umwandeln | IYUV-Anforderung lieferte mit SDL 3.4 nur Nullen (grünes Bild), auch mit gesetztem Farbraum. |
 | Optionsname | `--capture-card` | `--capture-orientation` gibt es schon (Aufnahme auf dem Handy). |
 | Spiegeln vs. DeX | Spiegeln (hochkant) bevorzugt | Größere Klickziele (Handy-UI für Finger gebaut), einfache Bedienung; Gesten über Kürzel ersetzbar. DeX: kleine Elemente, Fenster, Hover. |
-| Display-Auswahl | `--display-id`, Standard 0 | Neben Display 0 gibt es je nach Gerät ein DeX-Display („Desktop“, im Spiegelmodus aus) und das HDMI-Display, dessen ID wechselt (z. B. 7, 14, 15). Im Spiegelmodus wird Display 0 gesteuert. |
+| Display-Auswahl | automatisch, sonst `--display-id` | Neben Display 0 gibt es das HDMI-Display, dessen ID wechselt (z. B. 7, 9, 14, 15). Es ist auch im Spiegelmodus als `EXTERNAL` gelistet (dann ohne eigenen Inhalt) – der Typ allein unterscheidet DeX nicht vom Spiegeln. Entscheidend ist die Samsung-Einstellung `dex_on_external_display` (1 = DeX läuft auf dem externen Display), die die Display-Abfrage jede Sekunde mitliest (≈ 10 ms). Der Server steuert ein beim Start festgelegtes Display; ein Wechsel braucht deshalb einen Neustart von scrcpy (Exit-Code 3, Launcher). |
 | `--turn-screen-off` | Nicht verwenden | Macht im Spiegelmodus auch das HDMI-Bild schwarz. |
 | Server | Unverändert 5.0.1 | Kein Android-SDK-Build nötig; Version muss passen. |
 | Verbindung | WLAN-ADB + Launcher; Wireless Debugging bei Bedarf von Hand einschalten (Automatik optional) | USB-Anschluss ist durch HDMI belegt. |
@@ -489,6 +491,10 @@ Nicht getestet: vollständiger Login mit Freigabe per Authenticator (keine Zugan
 |---|---|
 | DeX an, scrcpy ohne `--display-id` | Bild zu klein/falsch: gesteuert wird Display 0 (Handy, Hochformat), der Zuschnitt schneidet aus dem DeX-Bild einen Hochformat-Streifen |
 | DeX an, `--display-id=9` (DeX-Display 1920×1080, ID aus `cmd display get-displays`) | ✅ Bild füllt das Fenster 1:1, Klicks treffen exakt |
+| Launcher ohne `--display-id`, DeX an | ✅ „controlling external display 9 (DeX)“, Bild 1:1 |
+| DeX aus während des Betriebs | ✅ „display to control changed (9 -> 0), restarting“, Launcher startet sofort neu, Display 0 im Hochformat |
+| DeX wieder an | ✅ Neustart, wieder Display 9 |
+| Erster Versuch: Auswahl nur nach Typ `EXTERNAL` | ❌ das HDMI-Display bleibt auch im Spiegelmodus `EXTERNAL` → Wechsel nicht erkannt; daher Samsung-Einstellung `dex_on_external_display` |
 
 Hinweis zu Tests: Ein `SetForegroundWindow` aus einem Hintergrundprozess wird von Windows oft
 verweigert. Simulierte Tastendrücke landen dann im falschen Fenster. Mausklicks auf
@@ -497,7 +503,6 @@ Bildschirmkoordinaten sind zuverlässiger.
 ### Offen
 
 - scrcpy starten, bevor die Capture-Karte eingesteckt ist (sollte durch das Neu-Einlesen ebenfalls gehen)
-- DeX automatisch erkennen (bisher `--display-id` von Hand; die ID kann sich ändern)
 - MOD+r (Handy drehen)
 - Vollständiger Login mit Freigabe per Authenticator
 - Mesh/AP-Wechsel: wird die Freigabe „Wireless Debugging in diesem Netzwerk“ erneut erfragt?
@@ -543,7 +548,7 @@ Bildschirmkoordinaten sind zuverlässiger.
 | Grünes Bild | Pixelformat-Problem (z. B. alte Version mit IYUV) → aktuellen Build verwenden. |
 | Schwarzes Bild | Handy-Display aus (`--turn-screen-off`, MOD+o) → MOD+Shift+o; HDMI-Kabel/Hub; HDCP bei geschützten Inhalten. |
 | Bild verzerrt/abgeschnitten, Klicks daneben | Displaygröße falsch/unbekannt (Warnung `could not read the size of display`) → `--display-id` prüfen, adb-Verbindung prüfen, notfalls `--capture-card-crop`. |
-| Klicks wirken nicht | Falsches Display (z. B. DeX-Display aus) → im Spiegelmodus `--display-id=0`. |
+| Klicks wirken nicht | Falsches Display → `--display-id` weglassen (Automatik) oder passend setzen; im Spiegelmodus `0`. |
 | `adb: no devices` / Launcher wartet | Wireless Debugging aus (Automatik prüfen), anderes WLAN, Multicast blockiert, Kopplung abgelaufen. `adb mdns services` zeigt, ob das Handy gefunden wird. |
 | Server bricht direkt nach dem Start ab, Log nennt unterschiedliche Versionen | `scrcpy-server` neben `scrcpy.exe` muss Version 5.0.1 sein. |
 | Build bricht mit `$'\r': command not found` ab | CRLF in `.sh`-Dateien → `git config core.autocrlf false`, neu auschecken. |

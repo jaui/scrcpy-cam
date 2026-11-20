@@ -8,6 +8,8 @@
     - beendet sich scrcpy wegen Verbindungsverlust oder Fehler, wird neu verbunden und
       neu gestartet (alle 2 s); scheitert der Start mehrmals hintereinander sofort (z. B.
       falsche Argumente), werden die Abstaende bis auf 60 s verlaengert
+    - wird DeX ein- oder ausgeschaltet (scrcpy endet mit Code 3), startet scrcpy sofort neu
+      und steuert dann das DeX- bzw. Handy-Display
     - wird das Fenster geschlossen (scrcpy endet normal), endet auch der Launcher
     - laeuft mit Windows PowerShell 5.1 und PowerShell 7
 
@@ -114,6 +116,13 @@ while ($true) {
     if ($code -eq 0) {
         Write-Log 'scrcpy wurde beendet (Fenster geschlossen) - Launcher endet.'
         break
+    }
+
+    if ($code -eq 3) {
+        # DeX ein-/ausgeschaltet: scrcpy waehlt das zu steuernde Display beim Start
+        Write-Log 'Anzeige gewechselt (DeX ein/aus) - starte scrcpy sofort neu.'
+        $quickFails = 0
+        continue
     }
 
     if ($ranSeconds -lt 15) { $quickFails++ } else { $quickFails = 0 }

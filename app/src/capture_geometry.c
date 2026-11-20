@@ -169,3 +169,44 @@ sc_capture_geometry_parse_display(const char *output, uint32_t display_id,
     }
     return false;
 }
+
+uint32_t
+sc_capture_geometry_select_display(const char *output) {
+    static const char external[] = "EXTERNAL";
+    static const char dex_on[] = "dex 1";
+    uint32_t selected = 0;
+    unsigned count = 0;
+    bool dex = false;
+
+    const char *line = output;
+    while (line && *line) {
+        if (!strncmp(line, dex_on, sizeof(dex_on) - 1)
+                && (line[sizeof(dex_on) - 1] == '\0'
+                    || line[sizeof(dex_on) - 1] == '\r'
+                    || line[sizeof(dex_on) - 1] == '\n')) {
+            dex = true;
+        }
+
+        char *end;
+        unsigned long id = strtoul(line, &end, 10);
+        if (end != line) {
+            // skip width, height and rotation
+            strtoul(end, &end, 10);
+            strtoul(end, &end, 10);
+            strtoul(end, &end, 10);
+            while (*end == ' ') {
+                ++end;
+            }
+            if (id && !strncmp(end, external, sizeof(external) - 1)) {
+                selected = (uint32_t) id;
+                ++count;
+            }
+        }
+
+        line = strchr(line, '\n');
+        if (line) {
+            ++line;
+        }
+    }
+    return dex && count == 1 ? selected : 0;
+}

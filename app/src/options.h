@@ -318,6 +318,7 @@ struct scrcpy_options {
     uint16_t window_width;
     uint16_t window_height;
     uint32_t display_id;
+    bool display_id_set; // scrcpy-cam: --display-id given explicitly
     uint32_t background_color;
     sc_tick video_buffer;
     sc_tick audio_buffer;

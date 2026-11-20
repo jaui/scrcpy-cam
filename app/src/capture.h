@@ -41,6 +41,11 @@ struct sc_capture {
 
     const char *serial;
     uint32_t display_id;
+    // Display chosen automatically (no --display-id): report a change (DeX
+    // switched on/off). Accessed only by the display monitor (and at init).
+    bool display_auto;
+    unsigned display_mismatch;
+    bool display_change_reported;
 
     sc_thread thread;
     sc_thread monitor_thread;
@@ -71,7 +76,16 @@ struct sc_capture_params {
     const char *crop; // "width:height:x:y", or NULL for auto
     const char *serial;
     uint32_t display_id;
+    bool display_auto; // display_id was chosen automatically
 };
+
+/**
+ * Choose the display to control: the external display (DeX on HDMI) if there
+ * is exactly one, otherwise 0. Return false if the displays could not be read.
+ */
+bool
+sc_capture_detect_display(struct sc_intr *intr, const char *serial,
+                          uint32_t *display_id);
 
 bool
 sc_capture_init(struct sc_capture *capture,

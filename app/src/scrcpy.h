@@ -14,6 +14,10 @@ enum scrcpy_exit_code {
 
     // Device was disconnected while running
     SCRCPY_EXIT_DISCONNECTED,
+
+    // scrcpy-cam: the display to control changed (DeX switched on/off) while
+    // it was chosen automatically; restart to follow it (see the launcher)
+    SCRCPY_EXIT_DISPLAY_CHANGED,
 };
 
 enum scrcpy_exit_code

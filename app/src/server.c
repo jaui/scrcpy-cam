@@ -8,6 +8,7 @@
 #include <sys/types.h>
 
 #include "adb/adb.h"
+#include "capture.h"
 #include "util/env.h"
 #include "util/file.h"
 #include "util/log.h"
@@ -1051,6 +1052,21 @@ run_server(void *data) {
     const char *serial = server->serial;
     assert(serial);
     LOGD("Device serial: %s", serial);
+
+    if (params->display_auto && !params->list) {
+        // scrcpy-cam: control DeX (an external display) if it is on
+        uint32_t display_id;
+        if (sc_capture_detect_display(&server->intr, serial, &display_id)) {
+            server->params.display_id = display_id;
+            if (display_id) {
+                LOGI("Capture card: controlling external display %" PRIu32
+                     " (DeX)", display_id);
+            }
+        } else {
+            LOGW("Capture card: could not list displays, using display %"
+                 PRIu32, params->display_id);
+        }
+    }
 
     ok = push_server(&server->intr, serial);
     if (!ok) {
